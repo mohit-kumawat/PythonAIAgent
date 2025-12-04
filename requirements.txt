@@ -1,8 +1,6 @@
-langchain 
-wikipedia 
-langchain-community 
-langchain-openai
-langchain-anthropic
+google-genai
 python-dotenv
-pydantic
-duckduckgo-search
+slack_sdk
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
