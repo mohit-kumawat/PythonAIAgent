@@ -2,6 +2,7 @@ import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from typing import List, Dict, Any
+from datetime import datetime, timedelta
 
 def get_slack_client():
     """Initializes and returns a Slack WebClient."""
@@ -94,3 +95,83 @@ def send_slack_message(channel_id: str, text: str):
         print(f"Message sent to {channel_id}")
     except SlackApiError as e:
         print(f"Error sending message: {e}")
+
+def schedule_slack_message(channel_id: str, text: str, scheduled_time: str) -> Dict[str, Any]:
+    """
+    Schedules a message to be sent to a Slack channel at a specific time.
+    
+    Args:
+        channel_id: The ID of the channel to send to.
+        text: The message text.
+        scheduled_time: ISO format datetime string (e.g., "2025-12-05T11:30:00")
+        
+    Returns:
+        Dict with scheduled message details or error info.
+    """
+    client = get_slack_client()
+    if not client:
+        return {"error": "Slack client not initialized"}
+
+    try:
+        # Parse the scheduled time and convert to Unix timestamp
+        dt = datetime.fromisoformat(scheduled_time)
+        post_at = int(dt.timestamp())
+        
+        result = client.chat_scheduleMessage(
+            channel=channel_id,
+            text=text,
+            post_at=post_at
+        )
+        
+        print(f"Message scheduled for {scheduled_time} in channel {channel_id}")
+        return {
+            "success": True,
+            "scheduled_message_id": result.get("scheduled_message_id"),
+            "post_at": post_at
+        }
+    except SlackApiError as e:
+        print(f"Error scheduling message: {e}")
+        return {"error": str(e)}
+    except ValueError as e:
+        print(f"Invalid datetime format: {e}")
+        return {"error": f"Invalid datetime format: {e}"}
+
+def get_messages_mentions(channel_id: str, user_id: str, days: int = 7) -> List[Dict[str, Any]]:
+    """
+    Gets messages where a specific user was mentioned in the last N days.
+    
+    Args:
+        channel_id: The ID of the channel to search.
+        user_id: The user ID to look for mentions.
+        days: Number of days to look back.
+        
+    Returns:
+        List of messages containing mentions.
+    """
+    client = get_slack_client()
+    if not client:
+        return []
+
+    try:
+        # Calculate oldest timestamp (7 days ago)
+        oldest = (datetime.now() - timedelta(days=days)).timestamp()
+        
+        result = client.conversations_history(
+            channel=channel_id,
+            oldest=str(oldest),
+            limit=100
+        )
+        
+        messages = result["messages"]
+        
+        # Filter for messages that mention the user
+        mentions = [
+            msg for msg in messages 
+            if f"<@{user_id}>" in msg.get("text", "")
+        ]
+        
+        return mentions
+        
+    except SlackApiError as e:
+        print(f"Error fetching mentions: {e}")
+        return []

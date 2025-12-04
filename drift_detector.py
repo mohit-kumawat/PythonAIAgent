@@ -4,23 +4,42 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from state_manager import read_context
-from slack_tools import read_slack_messages
+from slack_tools import read_slack_messages, get_self_todo
 
-def analyze_drift(client, channel_id):
+def analyze_drift(client, channel_ids, todo_sync=False):
     """
     Compares the 'Project Context' (Plan) against the 'Recent Slack Messages' (Reality).
     Looks for discrepancies, completed tasks, or new risks.
+    
+    Args:
+        client: Gemini client
+        channel_ids: List of channel IDs to check
+        todo_sync: Boolean, whether to check self-todos
     """
     # 1. Read Context
     context_text = read_context()
     
     # 2. Read Slack Messages
-    # The user requested limit=20
-    slack_messages = read_slack_messages(channel_id, limit=20)
+    all_messages = []
+    
+    # Fetch from channels
+    if channel_ids:
+        for cid in channel_ids:
+            msgs = read_slack_messages(cid, limit=20)
+            # Add channel context to messages
+            for m in msgs:
+                m['source_channel'] = cid
+            all_messages.extend(msgs)
+            
+    # Fetch from To-Dos if requested
+    if todo_sync:
+        todos = get_self_todo(limit=20)
+        # Format todos as messages
+        todo_msgs = [{'text': t, 'source': 'self-todo'} for t in todos]
+        all_messages.extend(todo_msgs)
     
     # Convert slack messages to a string representation for the prompt
-    # We'll just use the raw list of dicts, converted to string
-    slack_messages_str = json.dumps(slack_messages, indent=2, default=str)
+    slack_messages_str = json.dumps(all_messages, indent=2, default=str)
 
     # 3. Prepare Prompt
     system_prompt = "You are a Senior Technical Program Manager. Compare the 'Project Context' (Plan) against the 'Recent Slack Messages' (Reality). Look for discrepancies, completed tasks, or new risks."
@@ -29,7 +48,14 @@ def analyze_drift(client, channel_id):
 
  Slack Messages: {slack_messages_str} 
 
- Return a JSON object with this schema: {{ 'status_change_detected': boolean, 'reason': string, 'suggested_update_to_doc': string, 'risk_level': 'Low'|'High' }}"""
+ Return a JSON object with this schema: 
+ {{ 
+    'status_change_detected': boolean, 
+    'reason': string, 
+    'suggested_update_to_critical_status': string (The EXACT full markdown content for Section 1 'Critical Status' to replace the current content. Maintain existing schema.),
+    'suggested_update_to_action_items': string (The EXACT full markdown content for Section 3 'Action Items' to replace the current content. Maintain existing schema.),
+    'risk_level': 'Low'|'High' 
+ }}"""
 
     # 4. Call Gemini
     response = client.models.generate_content(

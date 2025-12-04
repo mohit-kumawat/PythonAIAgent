@@ -14,4 +14,4 @@ fi
 
 # Execute the sync command
 # REPLACE 'YOUR_SLACK_CHANNEL_ID_HERE' with your actual Slack Channel ID
-python main.py sync --channel YOUR_SLACK_CHANNEL_ID_HERE
+python main.py sync --channels C08JF2UFCR1 C07FMAQ3485 --todo-sync
