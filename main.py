@@ -325,11 +325,12 @@ SECOND, at the end of your response, output ONLY the structured actions in a JSO
 
 JSON Schema for EACH action object:
 {{
-  "action_type": "schedule_reminder" | "update_context_task",
+  "action_type": "schedule_reminder" | "update_context_task" | "send_message",
   "reasoning": "Brief explanation (e.g., 'Remind Umang about beta release')",
   "data": {{
     "target_channel_id": "Channel ID for Slack actions (use original message channel ID)",
     "target_user_ids": "List of Slack IDs mentioned or implied (e.g., ['U123456'])",
+    "message_text": "The exact message to send (for send_message action)",
     "time_iso": "ISO 8601 format for reminders (e.g., 2025-12-06T11:30:00). Must be future time.",
     "epic_title": "Epic name from context.md (e.g., Home Page Update)",
     "new_status": "New Status for the task",
@@ -337,6 +338,8 @@ JSON Schema for EACH action object:
     "new_markdown_content": "The EXACT full markdown content for Section '2. Active Epics & Tasks' to reflect the update. Maintain existing structure."
   }}
 }}
+
+IMPORTANT: Use "send_message" action type when you need to proactively ask about overdue tasks, check status, or notify the team about something urgent.
 
 Example JSON Output:
 ```json
@@ -474,6 +477,21 @@ Example JSON Output:
                         else:
                             # Fallback: Log intent if markdown content is missing
                             executed_actions.append(f"✗ Intent captured: Context update for '{epic_title}' but missing 'new_markdown_content' in JSON plan.")
+                    
+                    elif action_type == "send_message":
+                        # Send an immediate message to a channel
+                        channel_id = data.get('target_channel_id') or all_mentions[0]['channel_id']
+                        message_text = data.get('message_text')
+                        
+                        if not message_text:
+                            executed_actions.append(f"✗ Skipped send_message: Missing message_text")
+                            continue
+                        
+                        try:
+                            send_slack_message(channel_id, message_text)
+                            executed_actions.append(f"✓ Message sent: {action.get('reasoning', 'Message sent')}")
+                        except Exception as e:
+                            executed_actions.append(f"✗ Failed to send message: {e}")
                         
                     else:
                         executed_actions.append(f"✗ Unknown action type in plan: {action_type}")

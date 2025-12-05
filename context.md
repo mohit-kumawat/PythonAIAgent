@@ -10,12 +10,12 @@ Last Updated: 2025-12-05 11:12 IST
 
 ## 2. Active Epics & Tasks
 ### Home Page Update
-- Owner: Umang
+- Owner: U07NJKB5HA7
 - Status: In Progress
 - Dependencies: Proactive Question Flow
 - Due: TBD
 ### Proactive Question Flow
-- Owner: Badal
+- Owner: U089RT1AUUR
 - Status: In Progress
 - Dependencies: None
 - Due: TBD
@@ -23,7 +23,7 @@ Last Updated: 2025-12-05 11:12 IST
 - Owner: Team
 - Status: To Do
 - Dependencies: Home Page Update, Proactive Question Flow
-- Due: 2025-12-06
+- Due: 2025-12-05
 
 ## 3. Reminders (Managed by Agent)
 - [None]
