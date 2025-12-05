@@ -298,6 +298,12 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
     context_text = read_context()
     mentions_text = json.dumps(all_mentions, indent=2, default=str)
     
+    # Get current time for the LLM
+    from datetime import datetime
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
+    current_time = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S %Z')
+    
     # New prompt (replace the original):
     prompt = f"""You are The Real PM agent. Analyze these Slack messages where you were mentioned by Mohit.
 
@@ -305,6 +311,7 @@ CRITICAL RULES:
 1. These messages are ONLY from Mohit (authorized user).
 2. All messages are already filtered to last 7 days.
 3. Your response MUST contain TWO parts: a readable text analysis, and a structured JSON list of actions enclosed in a ```json code block.
+4. CURRENT TIME: {current_time}. DO NOT schedule reminders for times that have already passed.
 
 Current Project Context:
 {context_text}
@@ -393,6 +400,32 @@ Example JSON Output:
                         # We assume the LLM correctly provided the target users and time_iso
                         target_users = data.get('target_user_ids', [])
                         channel_id = data.get('target_channel_id') or all_mentions[0]['channel_id']
+                        time_iso = data.get('time_iso')
+                        
+                        # Validate that the time is in the future
+                        from datetime import datetime
+                        import pytz
+                        
+                        try:
+                            # Parse the scheduled time
+                            if 'T' in time_iso:
+                                scheduled_dt = datetime.fromisoformat(time_iso.replace('Z', '+00:00'))
+                            else:
+                                scheduled_dt = datetime.fromisoformat(time_iso)
+                            
+                            # Make it timezone-aware if it isn't
+                            if scheduled_dt.tzinfo is None:
+                                ist = pytz.timezone('Asia/Kolkata')
+                                scheduled_dt = ist.localize(scheduled_dt)
+                            
+                            # Check if it's in the past
+                            now = datetime.now(pytz.timezone('Asia/Kolkata'))
+                            if scheduled_dt <= now:
+                                executed_actions.append(f"⏭️  Skipped past-time reminder: {action.get('reasoning', 'Reminder')} (was scheduled for {time_iso})")
+                                continue
+                        except Exception as e:
+                            # If we can't parse the time, let Slack handle it
+                            pass
                         
                         # Use the action's reasoning as the core message content
                         core_action = action.get('reasoning', "A scheduled reminder.")
@@ -408,11 +441,11 @@ Example JSON Output:
                         result = schedule_slack_message(
                             channel_id=channel_id,
                             text=reminder_message,
-                            scheduled_time=data.get('time_iso')
+                            scheduled_time=time_iso
                         )
                         
                         if result.get('success'):
-                            executed_actions.append(f"✓ Scheduled reminder: {core_action} for {data.get('time_iso')}")
+                            executed_actions.append(f"✓ Scheduled reminder: {core_action} for {time_iso}")
                         else:
                             executed_actions.append(f"✗ Failed to schedule: {result.get('error')}")
                         
