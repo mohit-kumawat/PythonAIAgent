@@ -312,6 +312,7 @@ CRITICAL RULES:
 2. All messages are already filtered to last 7 days.
 3. Your response MUST contain TWO parts: a readable text analysis, and a structured JSON list of actions enclosed in a ```json code block.
 4. CURRENT TIME: {current_time}. DO NOT schedule reminders for times that have already passed.
+5. CHECK "3. Reminders (Managed by Agent)" section in the context below. DO NOT schedule reminders that are already listed there.
 
 Current Project Context:
 {context_text}
@@ -449,6 +450,16 @@ Example JSON Output:
                         
                         if result.get('success'):
                             executed_actions.append(f"✓ Scheduled reminder: {core_action} for {time_iso}")
+                            
+                            # Add the reminder to the context.md tracking section
+                            try:
+                                from datetime import datetime
+                                dt = datetime.fromisoformat(time_iso.replace('Z', '+00:00'))
+                                reminder_entry = f"- [{dt.strftime('%Y-%m-%d %H:%M')}] {core_action}"
+                                update_section("3. Reminders (Managed by Agent)", reminder_entry, append=True)
+                            except Exception as e:
+                                # Don't fail the whole action if tracking fails
+                                pass
                         else:
                             executed_actions.append(f"✗ Failed to schedule: {result.get('error')}")
                         
