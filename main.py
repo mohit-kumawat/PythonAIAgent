@@ -216,17 +216,41 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
     # Collect all mentions from all channels (already filtered to 7 days in get_messages_mentions)
     all_mentions = []
     unauthorized_mentions = []
+    skipped_channels = []
     
     for channel_id in channel_ids:
-        mentions = get_messages_mentions(channel_id, bot_user_id, days=7)
-        for msg in mentions:
-            msg['channel_id'] = channel_id
-            
-            # Separate authorized vs unauthorized mentions
-            if msg.get('user') == authorized_user_id:
-                all_mentions.append(msg)
+        try:
+            print(f"\n🔍 Checking channel: {channel_id}")
+            mentions = get_messages_mentions(channel_id, bot_user_id, days=7, debug=False)
+            for msg in mentions:
+                msg['channel_id'] = channel_id
+                sender_id = msg.get('user')
+                
+                # Skip messages from the bot itself (e.g., join notifications)
+                if sender_id == bot_user_id:
+                    print(f"  ℹ️  Skipping bot's own message (e.g., join notification)")
+                    continue
+                
+                # Separate authorized vs unauthorized mentions
+                if sender_id == authorized_user_id:
+                    all_mentions.append(msg)
+                else:
+                    unauthorized_mentions.append(msg)
+        except Exception as e:
+            error_str = str(e)
+            if 'not_in_channel' in error_str:
+                print(f"⚠️  Skipping channel {channel_id}: Bot is not a member of this channel")
+                print(f"    To fix: In Slack, type '/invite @The Real PM' in that channel")
+                skipped_channels.append(channel_id)
             else:
-                unauthorized_mentions.append(msg)
+                print(f"⚠️  Error accessing channel {channel_id}: {e}")
+                skipped_channels.append(channel_id)
+    
+    # Show summary of skipped channels
+    if skipped_channels:
+        print(f"\n📋 Summary: Skipped {len(skipped_channels)} channel(s) due to access issues")
+        print(f"   Successfully checked {len(channel_ids) - len(skipped_channels)} channel(s)")
+
     
     # Handle unauthorized mentions
     if unauthorized_mentions:

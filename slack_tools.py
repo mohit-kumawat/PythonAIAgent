@@ -1,4 +1,6 @@
 import os
+import ssl
+import certifi
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from typing import List, Dict, Any
@@ -10,7 +12,10 @@ def get_slack_client():
     if not token:
         print("Warning: SLACK_BOT_TOKEN not found in environment variables.")
         return None
-    return WebClient(token=token)
+    
+    # Create SSL context with certifi certificates to fix Mac SSL issues
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    return WebClient(token=token, ssl=ssl_context)
 
 def read_slack_messages(channel_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
@@ -136,7 +141,7 @@ def schedule_slack_message(channel_id: str, text: str, scheduled_time: str) -> D
         print(f"Invalid datetime format: {e}")
         return {"error": f"Invalid datetime format: {e}"}
 
-def get_messages_mentions(channel_id: str, user_id: str, days: int = 7) -> List[Dict[str, Any]]:
+def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: bool = False) -> List[Dict[str, Any]]:
     """
     Gets messages where a specific user was mentioned in the last N days.
     
@@ -144,6 +149,7 @@ def get_messages_mentions(channel_id: str, user_id: str, days: int = 7) -> List[
         channel_id: The ID of the channel to search.
         user_id: The user ID to look for mentions.
         days: Number of days to look back.
+        debug: If True, print debug information.
         
     Returns:
         List of messages containing mentions.
@@ -164,14 +170,25 @@ def get_messages_mentions(channel_id: str, user_id: str, days: int = 7) -> List[
         
         messages = result["messages"]
         
+        if debug:
+            print(f"\n[DEBUG] Found {len(messages)} total messages in channel {channel_id}")
+            print(f"[DEBUG] Looking for mentions of user: <@{user_id}>")
+            for i, msg in enumerate(messages[:5]):  # Show first 5 messages
+                print(f"[DEBUG] Message {i+1}: {msg.get('text', '')[:100]}")
+        
         # Filter for messages that mention the user
         mentions = [
             msg for msg in messages 
             if f"<@{user_id}>" in msg.get("text", "")
         ]
         
+        if debug:
+            print(f"[DEBUG] Found {len(mentions)} messages with mentions")
+        
         return mentions
         
     except SlackApiError as e:
-        print(f"Error fetching mentions: {e}")
-        return []
+        # Re-raise the exception so caller can handle it
+        raise e
+
+
