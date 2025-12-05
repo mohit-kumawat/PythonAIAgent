@@ -326,7 +326,8 @@ JSON Schema for EACH action object:
     "time_iso": "ISO 8601 format for reminders (e.g., 2025-12-06T11:30:00). Must be future time.",
     "epic_title": "Epic name from context.md (e.g., Home Page Update)",
     "new_status": "New Status for the task",
-    "new_owner": "New Owner for the task"
+    "new_owner": "New Owner for the task",
+    "new_markdown_content": "The EXACT full markdown content for Section '2. Active Epics & Tasks' to reflect the update. Maintain existing structure."
   }}
 }}
 
@@ -416,9 +417,21 @@ Example JSON Output:
                             executed_actions.append(f"✗ Failed to schedule: {result.get('error')}")
                         
                     elif action_type == "update_context_task":
-                        # **NOTE: For now, we only log the intent until the full context update logic is defined.**
-                        # In the next step, this will be replaced with logic to call update_section
-                        executed_actions.append(f"✓ Intent captured: Context update for '{data.get('epic_title')}' (Status: {data.get('new_status')})")
+                        epic_title = data.get('epic_title')
+                        new_status = data.get('new_status')
+                        new_owner = data.get('new_owner')
+                        
+                        # Use the new markdown content provided by the LLM
+                        if 'new_markdown_content' in data:
+                            try:
+                                # Update the Active Epics section (Section 2) with the new markdown block
+                                update_section("2. Active Epics & Tasks", data['new_markdown_content'])
+                                executed_actions.append(f"✓ Context Updated: '{epic_title}' status set to '{new_status}'")
+                            except ValueError as e:
+                                executed_actions.append(f"✗ Failed to update context: {e}")
+                        else:
+                            # Fallback: Log intent if markdown content is missing
+                            executed_actions.append(f"✗ Intent captured: Context update for '{epic_title}' but missing 'new_markdown_content' in JSON plan.")
                         
                     else:
                         executed_actions.append(f"✗ Unknown action type in plan: {action_type}")
