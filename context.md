@@ -18,6 +18,11 @@ Last Updated: 2025-12-05 11:12 IST
 - Status: In Progress
 - Dependencies: None
 - Due: TBD
+### Test and release new home page
+- Owner: Team
+- Status: To Do
+- Dependencies: Home Page Update, Proactive Question Flow
+- Due: 2025-12-06
 
 ## 3. Reminders (Managed by Agent)
 - [None]

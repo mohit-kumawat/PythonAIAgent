@@ -87,7 +87,16 @@ def update_section(section_title, new_content, append=False):
         clean_new_content = existing_content + "\n" + new_content.strip() + "\n"
     else:
         # Replace existing content
-        clean_new_content = new_content.strip() + "\n"
+        clean_new_content = new_content.strip()
+        
+        # Check if the new content accidentally includes the header itself
+        # match.group(1) is like "## 2. Active Epics & Tasks\n"
+        header_text = match.group(1).strip()
+        if clean_new_content.startswith(header_text):
+            # Remove the header from the new content to avoid duplication
+            clean_new_content = clean_new_content[len(header_text):].strip()
+            
+        clean_new_content = clean_new_content + "\n"
     
     # Reconstruct the file content
     # content[:match.end(1)] includes the header
