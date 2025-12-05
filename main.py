@@ -426,7 +426,16 @@ Example JSON Output:
                             try:
                                 # Update the Active Epics section (Section 2) with the new markdown block
                                 update_section("2. Active Epics & Tasks", data['new_markdown_content'])
-                                executed_actions.append(f"✓ Context Updated: '{epic_title}' status set to '{new_status}'")
+                                
+                                # Build a better success message
+                                if epic_title and new_status:
+                                    executed_actions.append(f"✓ Context Updated: '{epic_title}' status set to '{new_status}'")
+                                elif epic_title and new_owner:
+                                    executed_actions.append(f"✓ Context Updated: '{epic_title}' owner set to '{new_owner}'")
+                                elif epic_title:
+                                    executed_actions.append(f"✓ Context Updated: '{epic_title}' task modified")
+                                else:
+                                    executed_actions.append(f"✓ Context Updated: Active Epics & Tasks section refreshed")
                             except ValueError as e:
                                 executed_actions.append(f"✗ Failed to update context: {e}")
                         else:

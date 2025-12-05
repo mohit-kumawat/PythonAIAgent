@@ -2,10 +2,11 @@
 Last Updated: 2025-12-05 11:12 IST
 
 ## 1. Overall Health & Risk Register
-- **Health:** Yellow (UI/UX Issues)
+- **Health:** Yellow (UI/UX Issues, Team Capacity)
 - **Primary Blockers:** Bottom Navigation Bar UI Issue
 - **Risk Items:**
     - [High] Bottom Navigation Bar UI/UX issues affecting Alpha Release. Owner: TBD.
+    - [Medium] Mohit's illness affecting Home Page Update. Owner: TBD
 
 ## 2. Active Epics & Tasks
 ### Home Page Update
