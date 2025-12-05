@@ -24,6 +24,27 @@ from client_manager import ClientManager
 # Load environment variables
 load_dotenv()
 
+def extract_json_block(text: str) -> list:
+    """Safely extracts a JSON list enclosed in a markdown code block."""
+    import re
+    import json
+    # Regex to find a block starting with ```json and ending with ```
+    match = re.search(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL)
+    
+    if match:
+        json_content = match.group(1).strip()
+        try:
+            return json.loads(json_content)
+        except json.JSONDecodeError as e:
+            print(f"Warning: Failed to parse extracted JSON block: {e}")
+            return []
+    
+    # Fallback for plain JSON output if no code block wrapper is found
+    try:
+        return json.loads(text.strip())
+    except:
+        return []
+
 def run_sync_mode(manager: ClientManager, channel_ids: list, todo_sync: bool):
     """
     Executes the 'sync' mode: checks for drift and optionally updates context.
@@ -69,35 +90,35 @@ def run_sync_mode(manager: ClientManager, channel_ids: list, todo_sync: bool):
     if result.get('status_change_detected'):
         print("\n-----------------------")
         
-        # 1. Critical Status Update
-        suggested_status = result.get('suggested_update_to_critical_status')
-        if suggested_status:
-            print("\n[Proposed Update for '1. Critical Status']")
-            print(suggested_status)
+        # 1. Overall Health & Risk Register Update
+        suggested_health = result.get('suggested_update_to_overall_health_and_risk')
+        if suggested_health:
+            print("\n[Proposed Update for '1. Overall Health & Risk Register']")
+            print(suggested_health)
             apply = input("Apply this update? [y/n]: ").strip().lower()
             if apply == 'y':
                 try:
-                    update_section("1. Critical Status", suggested_status)
-                    print("Critical Status updated.")
+                    update_section("1. Overall Health & Risk Register", suggested_health)
+                    print("Overall Health & Risk Register updated.")
                 except Exception as e:
-                    print(f"Failed to update Critical Status: {e}")
+                    print(f"Failed to update Overall Health & Risk Register: {e}")
             else:
-                print("Skipped Critical Status update.")
+                print("Skipped Overall Health & Risk Register update.")
 
-        # 2. Action Items Update
-        suggested_actions = result.get('suggested_update_to_action_items')
-        if suggested_actions:
-            print("\n[Proposed Update for '3. Action Items']")
-            print(suggested_actions)
+        # 2. Active Epics & Tasks Update
+        suggested_epics = result.get('suggested_update_to_active_epics_and_tasks')
+        if suggested_epics:
+            print("\n[Proposed Update for '2. Active Epics & Tasks']")
+            print(suggested_epics)
             apply = input("Apply this update? [y/n]: ").strip().lower()
             if apply == 'y':
                 try:
-                    update_section("3. Action Items", suggested_actions)
-                    print("Action Items updated.")
+                    update_section("2. Active Epics & Tasks", suggested_epics)
+                    print("Active Epics & Tasks updated.")
                 except Exception as e:
-                    print(f"Failed to update Action Items: {e}")
+                    print(f"Failed to update Active Epics & Tasks: {e}")
             else:
-                print("Skipped Action Items update.")
+                print("Skipped Active Epics & Tasks update.")
 
     else:
         print("No status change detected. Context is up to date.")
@@ -277,13 +298,13 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
     context_text = read_context()
     mentions_text = json.dumps(all_mentions, indent=2, default=str)
     
+    # New prompt (replace the original):
     prompt = f"""You are The Real PM agent. Analyze these Slack messages where you were mentioned by Mohit.
 
 CRITICAL RULES:
-1. These messages are ONLY from Mohit (authorized user)
-2. All messages are already filtered to last 7 days
-3. For ANY reminder ("Remind me to..."), you MUST use schedule_slack_message tool
-4. Present a clear action plan before executing
+1. These messages are ONLY from Mohit (authorized user).
+2. All messages are already filtered to last 7 days.
+3. Your response MUST contain TWO parts: a readable text analysis, and a structured JSON list of actions enclosed in a ```json code block.
 
 Current Project Context:
 {context_text}
@@ -291,36 +312,37 @@ Current Project Context:
 Mohit's Messages (last 7 days):
 {mentions_text}
 
-Identify and propose actions for:
-1. **Reminders** (HIGHEST PRIORITY - use schedule_slack_message)
-   - Extract: action, time, mentioned users
-   - Format time as ISO datetime
-   
-2. **Task Assignments** ("@User is working on X")
-   - Extract: user, task
-   - Propose context.md update
-   
-3. **Direct Tasks** ("Make sure we...")
-   - Extract: task, deadline
-   - Propose context.md update
-   
-4. **Status Requests**
-   - Check context.md and propose response
+FIRST, provide a clear, readable summary of intents found (Reminders, Assignments, Tasks) and the proposed actions.
 
-Present your analysis in this format:
-```
-ANALYSIS COMPLETE
+SECOND, at the end of your response, output ONLY the structured actions in a JSON list.
 
-Found Items:
-1. [Type]: [Description]
-   - Details: ...
-   - Proposed Tool: ...
-   
-Proposed Actions:
-✓ [Action 1]
-✓ [Action 2]
+JSON Schema for EACH action object:
+{{
+  "action_type": "schedule_reminder" | "update_context_task",
+  "reasoning": "Brief explanation (e.g., 'Remind Umang about beta release')",
+  "data": {{
+    "target_channel_id": "Channel ID for Slack actions (use original message channel ID)",
+    "target_user_ids": "List of Slack IDs mentioned or implied (e.g., ['U123456'])",
+    "time_iso": "ISO 8601 format for reminders (e.g., 2025-12-06T11:30:00). Must be future time.",
+    "epic_title": "Epic name from context.md (e.g., Home Page Update)",
+    "new_status": "New Status for the task",
+    "new_owner": "New Owner for the task"
+  }}
+}}
 
-Do you approve? (yes/no)
+Example JSON Output:
+```json
+[
+  {{
+    "action_type": "schedule_reminder",
+    "reasoning": "Remind Mohit to take update from Pravin",
+    "data": {{
+      "target_channel_id": "C08JF2UFCR1",
+      "target_user_ids": ["U07FDMFFM5F", "U999888"],
+      "time_iso": "2025-12-06T11:30:00"
+    }}
+  }}
+]
 ```
 """
 
@@ -338,8 +360,19 @@ Do you approve? (yes/no)
         print("\n" + "="*80)
         print("AGENT ANALYSIS")
         print("="*80)
+        # Print the entire response (text plan + JSON block) for user review
         print(response.text)
         print("="*80 + "\n")
+        
+        # Extract the structured action plan using the new helper function
+        action_plan_json = extract_json_block(response.text)
+        
+        if not action_plan_json:
+            print("Warning: Could not extract structured action plan from response. No actions will be executed.")
+            return
+
+        # Display the parsed actions for final check
+        print(f"💡 Found {len(action_plan_json)} structured actions ready for execution.")
         
         # Ask for approval
         approval = input("Do you approve the proposed actions? [y/n]: ").strip().lower()
@@ -347,47 +380,66 @@ Do you approve? (yes/no)
         if approval == 'y':
             print("\n✓ Actions approved. Executing...")
             
-            # Parse response and execute actions
-            # For now, we'll use the command processor to help
-            from command_processor import is_reminder_command, extract_reminder_details
-            
             executed_actions = []
-            for msg in all_mentions:
-                msg_text = msg.get('text', '')
+            
+            # Execute all actions from the parsed JSON plan
+            for action in action_plan_json:
+                action_type = action.get('action_type')
+                data = action.get('data', {})
                 
-                # Check if it's a reminder
-                if is_reminder_command(msg_text):
-                    reminder_details = extract_reminder_details(msg_text)
-                    
-                    # Schedule the reminder
-                    try:
+                try:
+                    if action_type == "schedule_reminder":
+                        # We assume the LLM correctly provided the target users and time_iso
+                        target_users = data.get('target_user_ids', [])
+                        channel_id = data.get('target_channel_id') or all_mentions[0]['channel_id']
+                        
+                        # Use the action's reasoning as the core message content
+                        core_action = action.get('reasoning', "A scheduled reminder.")
+
+                        # Create the full reminder message using the existing format
+                        from command_processor import create_reminder_message
+                        
+                        reminder_message = create_reminder_message(
+                            {"action": core_action},
+                            target_users or [authorized_user_id]
+                        )
+                        
                         result = schedule_slack_message(
-                            channel_id=msg['channel_id'],
-                            text=create_reminder_message(
-                                reminder_details,
-                                reminder_details['mentioned_users'] or [authorized_user_id]
-                            ),
-                            scheduled_time=reminder_details['parsed_time']
+                            channel_id=channel_id,
+                            text=reminder_message,
+                            scheduled_time=data.get('time_iso')
                         )
                         
                         if result.get('success'):
-                            executed_actions.append(f"✓ Scheduled reminder for {reminder_details['time_str']}")
+                            executed_actions.append(f"✓ Scheduled reminder: {core_action} for {data.get('time_iso')}")
                         else:
                             executed_actions.append(f"✗ Failed to schedule: {result.get('error')}")
-                    except Exception as e:
-                        executed_actions.append(f"✗ Error scheduling reminder: {e}")
+                        
+                    elif action_type == "update_context_task":
+                        # **NOTE: For now, we only log the intent until the full context update logic is defined.**
+                        # In the next step, this will be replaced with logic to call update_section
+                        executed_actions.append(f"✓ Intent captured: Context update for '{data.get('epic_title')}' (Status: {data.get('new_status')})")
+                        
+                    else:
+                        executed_actions.append(f"✗ Unknown action type in plan: {action_type}")
+                        
+                except Exception as e:
+                    executed_actions.append(f"✗ Error during execution of {action_type}: {e}")
             
             if executed_actions:
                 print("\nExecution Results:")
                 for action in executed_actions:
                     print(f"  {action}")
             else:
-                print("\nNo automated actions executed. Manual review may be needed.")
+                print("\nNo automated actions executed.")
         else:
             print("✗ Actions cancelled by user.")
             
     except Exception as e:
         print(f"Error during analysis: {e}")
+
+
+
 
 def run_post_intro(channel_id: str):
     """

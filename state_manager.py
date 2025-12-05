@@ -45,7 +45,7 @@ Markdown Content:
             text = text[:-3]
         return json.loads(text.strip())
 
-def update_section(section_title, new_content):
+def update_section(section_title, new_content, append=False):
     """
     Updates a specific section in context.md.
     
@@ -53,6 +53,7 @@ def update_section(section_title, new_content):
         section_title: The title of the section to update (e.g., "1. Critical Status").
                        Matches lines starting with "## " followed by this title.
         new_content: The new content to replace the existing section body with.
+        append: If True, appends new_content to the existing section content instead of replacing it.
         
     Raises:
         ValueError: If the section header is not found.
@@ -80,9 +81,13 @@ def update_section(section_title, new_content):
         raise ValueError(f"Section '{section_title}' not found in {file_path}")
     
     # Construct the new content
-    # We keep the header (match.group(1)) and replace the body (match.group(2))
-    # We ensure the new content ends with a newline for formatting
-    clean_new_content = new_content.strip() + "\n"
+    if append:
+        # Append to existing content
+        existing_content = match.group(2).rstrip()
+        clean_new_content = existing_content + "\n" + new_content.strip() + "\n"
+    else:
+        # Replace existing content
+        clean_new_content = new_content.strip() + "\n"
     
     # Reconstruct the file content
     # content[:match.end(1)] includes the header
@@ -91,3 +96,4 @@ def update_section(section_title, new_content):
     
     with open(file_path, "w") as f:
         f.write(updated_file_content)
+

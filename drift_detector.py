@@ -44,18 +44,20 @@ def analyze_drift(client, channel_ids, todo_sync=False):
     # 3. Prepare Prompt
     system_prompt = "You are a Senior Technical Program Manager. Compare the 'Project Context' (Plan) against the 'Recent Slack Messages' (Reality). Look for discrepancies, completed tasks, or new risks."
     
-    user_prompt = f"""Context: {context_text} 
+    user_prompt = f"""You are a Senior Technical Program Manager. Compare the 'Project Context' (Plan) against the 'Recent Slack Messages' (Reality). Look for discrepancies, completed tasks, or new risks.
 
- Slack Messages: {slack_messages_str} 
+Context: {context_text} 
 
- Return a JSON object with this schema: 
- {{ 
-    'status_change_detected': boolean, 
-    'reason': string, 
-    'suggested_update_to_critical_status': string (The EXACT full markdown content for Section 1 'Critical Status' to replace the current content. Maintain existing schema.),
-    'suggested_update_to_action_items': string (The EXACT full markdown content for Section 3 'Action Items' to replace the current content. Maintain existing schema.),
-    'risk_level': 'Low'|'High' 
- }}"""
+Slack Messages: {slack_messages_str} 
+
+Return a JSON object with this schema: 
+{{ 
+   'status_change_detected': boolean, 
+   'reason': string, 
+   'suggested_update_to_overall_health_and_risk': string (The EXACT full markdown content for Section '1. Overall Health & Risk Register' to completely replace the current content. Maintain the list structure for Risk Items.),
+   'suggested_update_to_active_epics_and_tasks': string (The EXACT full markdown content for Section '2. Active Epics & Tasks' to completely replace the current content. Ensure assignments are correctly reflected in the Owner and Status fields.),
+   'risk_level': 'Low'|'High'|'Medium' 
+}}"""
 
     # 4. Call Gemini
     response = client.models.generate_content(
