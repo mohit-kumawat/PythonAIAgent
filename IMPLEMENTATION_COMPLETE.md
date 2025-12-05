@@ -186,14 +186,16 @@ Mention bot in Slack:
 - LLM identifies epic "Home Page Update"
 - Intent logged: "✓ Intent captured: Context update for 'Home Page Update' (Status: Completed)"
 
-### 4. Test Drift Detection
+### 5. Verify Interactive Agent (agent.py)
 ```bash
-python main.py sync --channels C08JF2UFCR1
+python agent.py
+# Type: "Send a message to test channel that I am testing the new agent architecture."
 ```
 
 **Expected:**
-- Drift analysis uses new section names
-- Proposes updates for "Overall Health & Risk Register" and "Active Epics & Tasks"
+- Agent proposes plan: "ACTION: send_message ... Message: 'Mohit is testing...'"
+- User approves (yes)
+- Message appears in Slack
 
 ---
 
@@ -203,6 +205,7 @@ python main.py sync --channels C08JF2UFCR1
 - ✅ Test `process-mentions` with real Slack commands
 - ✅ Test `sync` mode with new context structure
 - ✅ Verify JSON extraction with various LLM responses
+- ✅ Verify Interactive Agent (`agent.py`) flow
 
 ### Short-Term Enhancements
 - [ ] Implement smart context.md epic updates (not just Raw Notes)
@@ -223,6 +226,7 @@ python main.py sync --channels C08JF2UFCR1
 - **Full Refactoring Details:** See `REFACTORING_SUMMARY.md`
 - **Agent Instructions:** See `agent_instruction.txt`
 - **Context Structure:** See `context.md`
+- **Interactive Guide:** See `INTERACTIVE_GUIDE.md`
 
 ---
 
@@ -236,6 +240,7 @@ python main.py sync --channels C08JF2UFCR1
 | **Maintainability** | Low (brittle regex) | High (type-safe) | Significant |
 | **Extensibility** | Hard (add patterns) | Easy (add schema) | Significant |
 | **User Experience** | Text-only | Text + structured | Enhanced |
+| **Interactivity** | CLI flags only | Natural Language Chat | New Capability |
 
 ---
 
@@ -250,3 +255,4 @@ python main.py sync --channels C08JF2UFCR1
 **Status:** ✅ **READY FOR PRODUCTION TESTING**
 
 All tasks complete. The agent is now ready for real-world testing with the new dual-output structured command processing system.
+
