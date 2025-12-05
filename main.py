@@ -326,12 +326,13 @@ SECOND, at the end of your response, output ONLY the structured actions in a JSO
 
 JSON Schema for EACH action object:
 {{
-  "action_type": "schedule_reminder" | "update_context_task" | "send_message",
+  "action_type": "schedule_reminder" | "update_context_task" | "send_message" | "draft_reply",
   "reasoning": "Brief explanation (e.g., 'Remind Umang about beta release')",
   "data": {{
     "target_channel_id": "Channel ID for Slack actions (use original message channel ID)",
     "target_user_ids": "List of Slack IDs mentioned or implied (e.g., ['U123456'])",
-    "message_text": "The exact message to send (for send_message action)",
+    "message_text": "The exact message to send (for send_message or draft_reply action)",
+    "reply_to_message_ts": "Timestamp of the message to reply to (for draft_reply action)",
     "time_iso": "ISO 8601 format for reminders (e.g., 2025-12-06T11:30:00). Must be future time.",
     "epic_title": "Epic name from context.md (e.g., Home Page Update)",
     "new_status": "New Status for the task",
@@ -340,7 +341,10 @@ JSON Schema for EACH action object:
   }}
 }}
 
-IMPORTANT: Use "send_message" action type when you need to proactively ask about overdue tasks, check status, or notify the team about something urgent.
+IMPORTANT: 
+- Use "send_message" when you need to proactively notify the team.
+- Use "draft_reply" when someone asked Mohit a question and you need to draft a response for his approval.
+- Check "3. Reminders (Managed by Agent)" to avoid duplicate reminders.
 
 Example JSON Output:
 ```json
@@ -386,10 +390,78 @@ Example JSON Output:
         # Display the parsed actions for final check
         print(f"💡 Found {len(action_plan_json)} structured actions ready for execution.")
         
-        # Ask for approval
-        approval = input("Do you approve the proposed actions? [y/n]: ").strip().lower()
+        # Interactive approval loop
+        while True:
+            approval = input("\nApprove and execute? [y/n/u to update]: ").strip().lower()
+            
+            if approval == 'y':
+                break  # Proceed to execution
+            elif approval == 'n':
+                print("✗ Actions cancelled by user.")
+                return
+            elif approval == 'u':
+                print("\n📝 Update Mode - You can modify the proposed actions.")
+                print("Available commands:")
+                print("  - 'delete <number>' - Remove an action")
+                print("  - 'edit <number>' - Edit an action's message/reasoning")
+                print("  - 'done' - Finish editing and approve")
+                print("  - 'cancel' - Cancel all actions\n")
+                
+                while True:
+                    # Display current actions
+                    print("\nCurrent Actions:")
+                    for i, action in enumerate(action_plan_json, 1):
+                        print(f"  {i}. [{action.get('action_type')}] {action.get('reasoning', 'No description')}")
+                    
+                    edit_cmd = input("\nEdit command: ").strip().lower()
+                    
+                    if edit_cmd == 'done':
+                        print("\n✓ Edits complete. Proceeding to execution...")
+                        break
+                    elif edit_cmd == 'cancel':
+                        print("✗ Actions cancelled by user.")
+                        return
+                    elif edit_cmd.startswith('delete '):
+                        try:
+                            idx = int(edit_cmd.split()[1]) - 1
+                            if 0 <= idx < len(action_plan_json):
+                                removed = action_plan_json.pop(idx)
+                                print(f"✓ Removed: {removed.get('reasoning')}")
+                            else:
+                                print("❌ Invalid action number")
+                        except (ValueError, IndexError):
+                            print("❌ Invalid command. Use: delete <number>")
+                    elif edit_cmd.startswith('edit '):
+                        try:
+                            idx = int(edit_cmd.split()[1]) - 1
+                            if 0 <= idx < len(action_plan_json):
+                                action = action_plan_json[idx]
+                                print(f"\nEditing: {action.get('reasoning')}")
+                                
+                                # Allow editing the reasoning
+                                new_reasoning = input(f"New reasoning (or press Enter to keep): ").strip()
+                                if new_reasoning:
+                                    action['reasoning'] = new_reasoning
+                                
+                                # Allow editing message text if applicable
+                                if 'message_text' in action.get('data', {}):
+                                    new_message = input(f"New message (or press Enter to keep): ").strip()
+                                    if new_message:
+                                        action['data']['message_text'] = new_message
+                                
+                                print("✓ Action updated")
+                            else:
+                                print("❌ Invalid action number")
+                        except (ValueError, IndexError):
+                            print("❌ Invalid command. Use: edit <number>")
+                    else:
+                        print("❌ Unknown command. Try: delete <n>, edit <n>, done, or cancel")
+                
+                break  # Exit the approval loop and proceed to execution
+            else:
+                print("❌ Please enter 'y' (yes), 'n' (no), or 'u' (update)")
         
-        if approval == 'y':
+        if approval == 'y' or approval == 'u':  # Execute if approved or after editing
             print("\n✓ Actions approved. Executing...")
             
             executed_actions = []
@@ -503,6 +575,31 @@ Example JSON Output:
                             executed_actions.append(f"✓ Message sent: {action.get('reasoning', 'Message sent')}")
                         except Exception as e:
                             executed_actions.append(f"✗ Failed to send message: {e}")
+                    
+                    elif action_type == "draft_reply":
+                        # Draft a reply but don't send it automatically - just show it
+                        message_text = data.get('message_text')
+                        
+                        if not message_text:
+                            executed_actions.append(f"✗ Skipped draft_reply: Missing message_text")
+                            continue
+                        
+                        print(f"\n{'='*80}")
+                        print("📝 DRAFTED REPLY")
+                        print(f"{'='*80}")
+                        print(message_text)
+                        print(f"{'='*80}\n")
+                        
+                        send_now = input("Send this reply now? [y/n]: ").strip().lower()
+                        if send_now == 'y':
+                            try:
+                                channel_id = data.get('target_channel_id') or all_mentions[0]['channel_id']
+                                send_slack_message(channel_id, message_text)
+                                executed_actions.append(f"✓ Reply sent: {action.get('reasoning', 'Reply sent')}")
+                            except Exception as e:
+                                executed_actions.append(f"✗ Failed to send reply: {e}")
+                        else:
+                            executed_actions.append(f"ℹ️  Draft saved (not sent): {action.get('reasoning', 'Reply draft')}")
                         
                     else:
                         executed_actions.append(f"✗ Unknown action type in plan: {action_type}")
