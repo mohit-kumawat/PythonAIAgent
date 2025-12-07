@@ -68,6 +68,41 @@ D. STATUS REQUESTS
    Pattern: "What's the status of [item]"
    Action: Check context.md and recent Slack history
 
+E. EMAIL SUMMARY REQUESTS
+   Pattern: "Send me a summary" / "Email me an update" / "Weekly report"
+   Examples:
+   - "Send me a weekly summary of the project"
+   - "Email the team an update"
+   - "Send project status to team@example.com"
+   
+   Action: Use send_email_summary tool
+   - Extract recipient email if specified
+   - Determine period (daily/weekly)
+   - Generate summary from context.md
+
+F. POLL REQUESTS
+   Pattern: "Create a poll" / "Ask the team" / "Vote on"
+   Examples:
+   - "Create a poll asking about standup time: Monday, Wednesday, Friday"
+   - "Ask the team which release date works best"
+   - "Vote on the feature priority"
+   
+   Action: Use post_slack_poll tool
+   - Extract question and options
+   - Post to appropriate channel
+
+G. CALENDAR EVENTS
+   Pattern: "Block my calendar" / "Add a meeting" / "Schedule a meeting"
+   Examples:
+   - "Block my calendar tomorrow at 2pm for code review"
+   - "Add a meeting with Pravin at 3pm"
+   - "Schedule a team standup for Monday 10am"
+   
+   Action: Use add_calendar_event tool
+   - Parse time expression to ISO format
+   - Extract attendees if mentioned
+   - Create calendar event
+
 ═══════════════════════════════════════════════════════════════════════════════
 TOOL SELECTION RULES (STRICT PRIORITY ORDER)
 ═══════════════════════════════════════════════════════════════════════════════

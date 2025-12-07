@@ -141,25 +141,27 @@ def schedule_slack_message(channel_id: str, text: str, scheduled_time: str) -> D
         print(f"Invalid datetime format: {e}")
         return {"error": f"Invalid datetime format: {e}"}
 
-def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: bool = False) -> List[Dict[str, Any]]:
+def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: bool = False, 
+                          include_keywords: List[str] = None) -> List[Dict[str, Any]]:
     """
-    Gets messages where a specific user was mentioned in the last N days.
+    Gets messages where a specific user was mentioned or specific keywords appear in the last N days.
     
     Args:
         channel_id: The ID of the channel to search.
         user_id: The user ID to look for mentions.
         days: Number of days to look back.
         debug: If True, print debug information.
+        include_keywords: Optional list of keywords/phrases to search for (case-insensitive).
         
     Returns:
-        List of messages containing mentions.
+        List of messages containing mentions or keywords.
     """
     client = get_slack_client()
     if not client:
         return []
 
     try:
-        # Calculate oldest timestamp (7 days ago)
+        # Calculate oldest timestamp (N days ago)
         oldest = (datetime.now() - timedelta(days=days)).timestamp()
         
         result = client.conversations_history(
@@ -173,17 +175,31 @@ def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: b
         if debug:
             print(f"\n[DEBUG] Found {len(messages)} total messages in channel {channel_id}")
             print(f"[DEBUG] Looking for mentions of user: <@{user_id}>")
+            if include_keywords:
+                print(f"[DEBUG] Also searching for keywords: {include_keywords}")
             for i, msg in enumerate(messages[:5]):  # Show first 5 messages
                 print(f"[DEBUG] Message {i+1}: {msg.get('text', '')[:100]}")
         
-        # Filter for messages that mention the user
-        mentions = [
-            msg for msg in messages 
-            if f"<@{user_id}>" in msg.get("text", "")
-        ]
+        # Filter for messages that mention the user or contain keywords
+        mentions = []
+        for msg in messages:
+            text = msg.get("text", "")
+            text_lower = text.lower()
+            
+            # Check for direct mention
+            if f"<@{user_id}>" in text:
+                mentions.append(msg)
+                continue
+            
+            # Check for keywords if provided
+            if include_keywords:
+                for keyword in include_keywords:
+                    if keyword.lower() in text_lower:
+                        mentions.append(msg)
+                        break
         
         if debug:
-            print(f"[DEBUG] Found {len(mentions)} messages with mentions")
+            print(f"[DEBUG] Found {len(mentions)} messages with mentions or keywords")
         
         return mentions
         

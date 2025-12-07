@@ -1,0 +1,439 @@
+import os
+import sys
+import json
+import time
+import schedule
+from datetime import datetime
+import pytz
+from dotenv import load_dotenv
+from google.genai import types
+
+# Import existing modules
+from client_manager import ClientManager
+from state_manager import read_context, update_section
+from slack_tools import get_messages_mentions, send_slack_message, schedule_slack_message
+from command_processor import create_reminder_message
+
+# Import new modules
+from memory_manager import get_memory_manager
+from proactive_engine import ProactiveEngine
+from email_tools import send_email_summary
+from slack_polls import post_slack_poll
+from calendar_tools import add_calendar_event
+
+# Shared State Paths
+SERVER_STATE_DIR = "server_state"
+PENDING_ACTIONS_FILE = os.path.join(SERVER_STATE_DIR, "pending_actions.json")
+STATUS_FILE = os.path.join(SERVER_STATE_DIR, "status.json")
+LOG_FILE = os.path.join(SERVER_STATE_DIR, "agent_log.txt")
+
+# Ensure state directory exists
+os.makedirs(SERVER_STATE_DIR, exist_ok=True)
+
+load_dotenv()
+
+# Initialize memory manager
+memory = get_memory_manager()
+
+def log(message: str):
+    """Writes to the shared log file and stdout."""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted_msg = f"[{timestamp}] {message}"
+        print(formatted_msg)
+        with open(LOG_FILE, "a") as f:
+            f.write(formatted_msg + "\n")
+    except Exception as e:
+        print(f"Log error: {e}")
+
+def update_status(status: str, detail: str = ""):
+    """Updates the agent's current status."""
+    try:
+        data = {
+            "status": status,
+            "detail": detail,
+            "last_updated": datetime.now().isoformat()
+        }
+        with open(STATUS_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        log(f"Error updating status: {e}")
+
+def get_pending_actions() -> list:
+    try:
+        if not os.path.exists(PENDING_ACTIONS_FILE):
+            return []
+        with open(PENDING_ACTIONS_FILE, "r") as f:
+            content = f.read().strip()
+            if not content: return []
+            return json.loads(content)
+    except Exception as e:
+        log(f"Error reading pending actions: {e}")
+        return []
+
+def save_pending_actions(actions: list):
+    try:
+        with open(PENDING_ACTIONS_FILE, "w") as f:
+            json.dump(actions, f, indent=2)
+    except Exception as e:
+        log(f"Error saving pending actions: {e}")
+
+def extract_json_block(text: str) -> list:
+    import re
+    match = re.search(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1).strip())
+        except:
+            return []
+    try:
+        return json.loads(text.strip())
+    except:
+        return []
+
+def check_mentions_job(manager: ClientManager, channel_ids: list):
+    """
+    Periodic job to check Slack mentions and generate action plans.
+    Adds proposed actions to pending_actions.json.
+    """
+    update_status("THINKING", "Checking Slack mentions...")
+    log("Starting mention check cycle...")
+    
+    bot_user_id = os.environ.get("SLACK_BOT_USER_ID")
+    authorized_user_id = os.environ.get("SLACK_USER_ID")
+    
+    # 1. Collect Mentions
+    all_mentions = []
+    search_keywords = ["mohit", "the real pm"]
+    
+    for channel_id in channel_ids:
+        try:
+            # Check bot mentions
+            msgs = get_messages_mentions(channel_id, bot_user_id, days=0.5, include_keywords=search_keywords)
+            # Check user mentions
+            user_msgs = get_messages_mentions(channel_id, authorized_user_id, days=0.5)
+            
+            # Combine
+            joined = msgs + user_msgs
+            for msg in joined:
+                msg['channel_id'] = channel_id
+                # Filter authorized & valid
+                if msg.get('user') == authorized_user_id:
+                    all_mentions.append(msg)
+        except Exception as e:
+            log(f"Error checking channel {channel_id}: {e}")
+
+    # Deduplicate by timestamp
+    unique_mentions_map = {m['ts']: m for m in all_mentions} 
+    unique_mentions = list(unique_mentions_map.values())
+    
+    if not unique_mentions:
+        log("No new relevant mentions found.")
+        update_status("IDLE", "Last check: No mentions")
+        return
+
+    log(f"Found {len(unique_mentions)} mentions. analyzing...")
+    
+    # 2. Analyze with LLM
+    try:
+        context_text = read_context()
+        mentions_text = json.dumps(unique_mentions, indent=2, default=str)
+        current_time = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%Y-%m-%d %H:%M:%S %Z')
+        
+        prompt = f"""You are The Real PM agent (Daemon Mode). Analyze these Slack messages.
+        
+        Current Time: {current_time}
+        Context: {context_text}
+        Messages: {mentions_text}
+        
+        Generate a structured JSON plan of actions.
+        JSON format: [{{ "action_type": "...", "reasoning": "...", "data": {{...}} }}]
+        Types: schedule_reminder, update_context_task, send_message, draft_reply, 
+               send_email_summary, post_slack_poll, add_calendar_event
+        """
+        
+        client = manager.get_client()
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        
+        new_actions = extract_json_block(response.text)
+        
+        if new_actions:
+            # 3. Append to Pending Queue
+            current_queue = get_pending_actions()
+            
+            # Simple deduplication could happen here, but for now just add
+            # Add a generic ID and status
+            for action in new_actions:
+                action['id'] = f"{int(time.time()*1000)}_{len(current_queue)}"
+                action['status'] = 'PENDING' # States: PENDING, APPROVED, REJECTED, EXECUTED, FAILED
+                action['created_at'] = datetime.now().isoformat()
+                current_queue.append(action)
+            
+            save_pending_actions(current_queue)
+            log(f"Added {len(new_actions)} actions to the queue.")
+        else:
+            log("No actions generated from analysis.")
+
+    except Exception as e:
+        log(f"AI Analysis failed: {e}")
+    
+    update_status("IDLE", f"Waiting. Queue size: {len(get_pending_actions())}")
+
+
+def run_proactive_check_job(channel_ids: list):
+    """
+    Periodic job to run proactive checks and add suggestions to queue.
+    """
+    log("Running proactive check...")
+    update_status("THINKING", "Running proactive analysis...")
+    
+    try:
+        context_text = read_context()
+        engine = ProactiveEngine(memory)
+        
+        # Collect recent messages for blocker detection
+        all_messages = []
+        bot_user_id = os.environ.get("SLACK_BOT_USER_ID")
+        for channel_id in channel_ids:
+            try:
+                msgs = get_messages_mentions(channel_id, bot_user_id, days=1)
+                all_messages.extend(msgs)
+            except:
+                pass
+        
+        # Get proactive suggestions
+        suggestions = engine.get_proactive_suggestions(context_text, all_messages)
+        
+        if suggestions:
+            current_queue = get_pending_actions()
+            
+            # Check for duplicate proactive suggestions
+            existing_ids = {a.get('id', '') for a in current_queue}
+            
+            new_suggestions = []
+            for s in suggestions:
+                if s['id'] not in existing_ids:
+                    new_suggestions.append(s)
+            
+            if new_suggestions:
+                current_queue.extend(new_suggestions)
+                save_pending_actions(current_queue)
+                log(f"Added {len(new_suggestions)} proactive suggestions to queue.")
+            else:
+                log("No new proactive suggestions (already in queue).")
+        else:
+            log("No proactive suggestions generated.")
+    
+    except Exception as e:
+        log(f"Proactive check failed: {e}")
+    
+    update_status("IDLE", f"Proactive check complete. Queue: {len(get_pending_actions())}")
+
+
+def run_weekly_report_job():
+    """
+    Weekly job to generate and optionally send a status report.
+    """
+    engine = ProactiveEngine(memory)
+    
+    if not engine.should_send_weekly_report():
+        return
+    
+    log("Generating weekly report...")
+    
+    try:
+        context_text = read_context()
+        report = engine.generate_status_report(context_text, period="weekly")
+        report_text = engine.generate_report_text(report)
+        
+        # Add report as a pending action for approval
+        action = {
+            "id": f"weekly-report-{int(time.time())}",
+            "action_type": "weekly_report",
+            "reasoning": "📊 Weekly status report is ready. Approve to send via email.",
+            "status": "PENDING",
+            "created_at": datetime.now().isoformat(),
+            "is_proactive": True,
+            "data": {
+                "report_text": report_text,
+                "report_data": report
+            }
+        }
+        
+        current_queue = get_pending_actions()
+        current_queue.append(action)
+        save_pending_actions(current_queue)
+        
+        log("Weekly report queued for approval.")
+        
+        # Log to memory
+        memory.log_action_execution(
+            action_id=action["id"],
+            action_type="weekly_report",
+            status="PENDING",
+            reasoning=action["reasoning"]
+        )
+        
+    except Exception as e:
+        log(f"Weekly report generation failed: {e}")
+
+
+def execute_approved_actions_job():
+    """
+    Continuous job to execute actions marked as APPROVED/EXECUTING.
+    """
+    queue = get_pending_actions()
+    dirty = False
+    
+    for action in queue:
+        if action.get('status') == 'APPROVED':
+            log(f"Executing action: {action.get('reasoning')}")
+            update_status("EXECUTING", action.get('reasoning'))
+            
+            try:
+                # Execution Logic (Extended with new action types)
+                atype = action.get('action_type')
+                data = action.get('data', {})
+                result = None
+                
+                if atype == 'schedule_reminder':
+                    msg = create_reminder_message({"action": action['reasoning']}, data.get('target_user_ids', []))
+                    result = schedule_slack_message(data['target_channel_id'], msg, data['time_iso'])
+                    
+                elif atype == 'send_message' or atype == 'draft_reply':
+                    send_slack_message(data['target_channel_id'], data['message_text'])
+                    result = "Message sent"
+                    
+                elif atype == 'update_context_task':
+                    if 'new_markdown_content' in data:
+                        update_section("2. Active Epics & Tasks", data['new_markdown_content'])
+                    result = "Context updated"
+                
+                # New action types
+                elif atype == 'send_email_summary':
+                    context_text = read_context()
+                    result = send_email_summary(
+                        recipient=data.get('recipient', os.environ.get('USER_EMAIL', '')),
+                        context_md=context_text,
+                        period=data.get('period', 'weekly')
+                    )
+                
+                elif atype == 'post_slack_poll':
+                    result = post_slack_poll(
+                        channel_id=data['channel_id'],
+                        question=data['question'],
+                        options=data['options']
+                    )
+                
+                elif atype == 'add_calendar_event':
+                    result = add_calendar_event(
+                        summary=data['summary'],
+                        start_time=data['start_time'],
+                        end_time=data.get('end_time'),
+                        description=data.get('description'),
+                        attendees=data.get('attendees')
+                    )
+                
+                elif atype == 'weekly_report':
+                    # Send the pre-generated report via email
+                    recipient = os.environ.get('USER_EMAIL', '')
+                    if recipient:
+                        from email_tools import send_email
+                        send_email(
+                            to=recipient,
+                            subject=f"📊 Weekly PM Report - {datetime.now().strftime('%Y-%m-%d')}",
+                            body=data.get('report_text', '')
+                        )
+                        result = f"Report sent to {recipient}"
+                    else:
+                        result = "No USER_EMAIL configured, report not sent"
+                
+                elif atype in ['proactive_followup', 'proactive_blocker_alert']:
+                    # Proactive actions just get acknowledged
+                    result = "Proactive suggestion acknowledged"
+                
+                action['status'] = 'EXECUTED'
+                action['executed_at'] = datetime.now().isoformat()
+                action['result'] = str(result) if result else "Success"
+                log(f"Action {action['id']} executed successfully.")
+                
+                # Log to memory
+                memory.log_action_execution(
+                    action_id=action['id'],
+                    action_type=atype,
+                    status="SUCCESS",
+                    reasoning=action.get('reasoning'),
+                    action_data=data,
+                    result=str(result)
+                )
+                memory.log_decision(atype, True, action.get('reasoning'), data)
+                
+            except Exception as e:
+                action['status'] = 'FAILED'
+                action['error'] = str(e)
+                log(f"Action {action['id']} failed: {e}")
+                
+                # Log failure to memory
+                memory.log_action_execution(
+                    action_id=action['id'],
+                    action_type=action.get('action_type'),
+                    status="FAILED",
+                    reasoning=action.get('reasoning'),
+                    action_data=data,
+                    result=str(e)
+                )
+            
+            dirty = True
+        
+        elif action.get('status') == 'REJECTED':
+            # Log rejected actions to memory for learning
+            memory.log_decision(
+                action.get('action_type'),
+                False,
+                action.get('reasoning'),
+                action.get('data')
+            )
+            action['status'] = 'REJECTED_LOGGED'
+            dirty = True
+            
+    if dirty:
+        save_pending_actions(queue)
+        update_status("IDLE", "Execution cycle complete")
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python daemon.py <channel_id1> [channel_id2 ...]")
+        return
+
+    channel_ids = sys.argv[1:]
+    
+    try:
+        manager = ClientManager()
+    except Exception as e:
+        log(f"Failed to init ClientManager: {e}")
+        return
+
+    log("Daemon started. Monitoring channels: " + str(channel_ids))
+    log(f"Memory database: {memory.db_path}")
+    
+    # Schedule jobs
+    schedule.every(5).minutes.do(check_mentions_job, manager=manager, channel_ids=channel_ids)
+    schedule.every(10).seconds.do(execute_approved_actions_job)
+    
+    # Proactive jobs
+    schedule.every(30).minutes.do(run_proactive_check_job, channel_ids=channel_ids)
+    schedule.every().friday.at("17:00").do(run_weekly_report_job)
+    
+    # Run once immediately
+    check_mentions_job(manager, channel_ids)
+    
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
+

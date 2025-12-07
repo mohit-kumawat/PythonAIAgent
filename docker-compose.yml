@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python daemon.py C07FMAQ3485
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dashboard:/app
+      - ./server_state:/server_state
+      - ./context.md:/context.md
+      # Use a slight hack to map parent folders for the API to work if it relies on 'process.cwd()' relative paths
+      # Actually, the Dashboard runs in /app. 
+      # Our API code in route.ts looks for path.join(process.cwd(), '../server_state')
+      # So inside the container, if WORKDIR is /app, then '../server_state' is /server_state.
+      # That matches the mapped volume /server_state at root level?
+      # No, if WORKDIR is /app, then .. is /. So /server_state needs to be at /server_state.
+      # Yes, that works.

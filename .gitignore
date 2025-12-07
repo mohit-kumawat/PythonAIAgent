@@ -1,5 +1,13 @@
+
+# .gitignore
 .env
 __pycache__/
 *.pyc
 token.json
 credentials.json
+
+# Runtime state and logs
+server_state/*.json
+server_state/*.txt
+memory/*.db
+daemon.log

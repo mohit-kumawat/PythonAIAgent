@@ -206,7 +206,8 @@ def run_chat_mode(manager: ClientManager):
 
 def run_process_mentions(manager: ClientManager, channel_ids: list):
     """
-    Processes messages where the bot is mentioned and executes intelligent commands.
+    Processes messages where the bot is mentioned, user is mentioned, or specific keywords appear.
+    Searches for: bot mentions, user mentions, "mohit", "the real pm"
     Only accepts commands from authorized user (Mohit).
     """
     if not channel_ids:
@@ -230,11 +231,15 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
         print("Warning: agent_instruction.txt not found. Using default instruction.")
         agent_instruction = "You are a helpful PM assistant."
 
-    print("Processing mentions across channels...")
+    print("Processing mentions and keywords across channels...")
     print(f"Authorized user: {authorized_user_id}")
     print(f"Bot user: {bot_user_id}")
+    print(f"Searching for: @mentions, 'mohit', 'the real pm' (last 24 hours)")
     
-    # Collect all mentions from all channels (already filtered to 7 days in get_messages_mentions)
+    # Keywords to search for in addition to mentions
+    search_keywords = ["mohit", "the real pm"]
+    
+    # Collect all mentions from all channels (filtered to last 1 day for full conversation context)
     all_mentions = []
     unauthorized_mentions = []
     skipped_channels = []
@@ -242,8 +247,28 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
     for channel_id in channel_ids:
         try:
             print(f"\n🔍 Checking channel: {channel_id}")
-            mentions = get_messages_mentions(channel_id, bot_user_id, days=7, debug=False)
-            for msg in mentions:
+            
+            # Search for bot mentions AND keywords (last 24 hours)
+            bot_mentions = get_messages_mentions(
+                channel_id, 
+                bot_user_id, 
+                days=1, 
+                debug=False,
+                include_keywords=search_keywords
+            )
+            
+            # Also search for user mentions (Mohit's user ID, last 24 hours)
+            user_mentions = get_messages_mentions(
+                channel_id,
+                authorized_user_id,
+                days=1,
+                debug=False
+            )
+            
+            # Combine and deduplicate by message timestamp
+            all_channel_mentions = {msg.get('ts'): msg for msg in (bot_mentions + user_mentions)}
+            
+            for msg in all_channel_mentions.values():
                 msg['channel_id'] = channel_id
                 sender_id = msg.get('user')
                 
@@ -257,6 +282,9 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
                     all_mentions.append(msg)
                 else:
                     unauthorized_mentions.append(msg)
+                    
+            print(f"  Found {len(all_channel_mentions)} relevant message(s)")
+            
         except Exception as e:
             error_str = str(e)
             if 'not_in_channel' in error_str:
@@ -289,7 +317,7 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
                 print(f"  ✗ Failed to send refusal: {e}")
     
     if not all_mentions:
-        print("No mentions from authorized user (Mohit) found in the last 7 days.")
+        print("No mentions from authorized user (Mohit) found in the last 24 hours.")
         return
     
     print(f"\nFound {len(all_mentions)} authorized mention(s). Analyzing...")
@@ -309,7 +337,7 @@ def run_process_mentions(manager: ClientManager, channel_ids: list):
 
 CRITICAL RULES:
 1. These messages are ONLY from Mohit (authorized user).
-2. All messages are already filtered to last 7 days.
+2. All messages are from the LAST 24 HOURS to capture full conversation context.
 3. Your response MUST contain TWO parts: a readable text analysis, and a structured JSON list of actions enclosed in a ```json code block.
 4. CURRENT TIME: {current_time}. DO NOT schedule reminders for times that have already passed.
 5. CHECK "3. Reminders (Managed by Agent)" section in the context below. DO NOT schedule reminders that are already listed there.
@@ -317,7 +345,7 @@ CRITICAL RULES:
 Current Project Context:
 {context_text}
 
-Mohit's Messages (last 7 days):
+Mohit's Messages (last 24 hours):
 {mentions_text}
 
 FIRST, provide a clear, readable summary of intents found (Reminders, Assignments, Tasks) and the proposed actions.
@@ -364,14 +392,42 @@ Example JSON Output:
 
     client = manager.get_client()
     
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=agent_instruction
+    # Retry logic with API key rotation (similar to sync mode)
+    max_retries = len(manager.keys)
+    attempts = 0
+    response = None
+    
+    while attempts < max_retries:
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=agent_instruction
+                )
             )
-        )
+            break  # Success
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                print(f"\n⚠️  Quota exceeded (Attempt {attempts+1}/{max_retries}). Rotating to next API key...")
+                client = manager.rotate_client()
+                attempts += 1
+                time.sleep(2)  # Brief pause before retry
+            else:
+                print(f"Error during analysis: {e}")
+                return
+    
+    if response is None:
+        print("\n❌ Error: All API keys exhausted or failed.")
+        print("💡 Suggestions:")
+        print("   1. Wait for quota to reset (usually 1 minute or 24 hours)")
+        print("   2. Add more API keys to your .env file (GOOGLE_API_KEY_2, GOOGLE_API_KEY_3, etc.)")
+        print("   3. Upgrade to a paid Gemini API plan")
+        print("   4. Check your usage at: https://ai.dev/usage?tab=rate-limit")
+        return
+    
+    try:
         
         print("\n" + "="*80)
         print("AGENT ANALYSIS")

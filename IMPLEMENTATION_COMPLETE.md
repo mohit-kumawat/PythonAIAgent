@@ -1,258 +1,295 @@
-# ✅ Implementation Complete: Dual-Output Structured Command Processing
+# ✅ Implementation Complete: Enhanced Mention Detection
 
-**Date:** 2025-12-05 11:00 IST  
-**Status:** ✅ All Tasks Complete
-
----
-
-## 📋 Summary
-
-Successfully implemented **Structured Context Management** and **Dual-Output Command Processing** to eliminate brittle regex parsing and enforce stricter PM rigor.
-
-### Key Innovation: Single Call, Dual Output ⚡
-
-The agent now makes **one LLM call** that returns:
-1. **Human-readable analysis** (for user review)
-2. **Structured JSON actions** (for machine execution)
-
-This approach provides the best of both worlds:
-- ✅ User-friendly output
-- ✅ Machine-executable precision
-- ✅ No additional token costs
-- ✅ Single API call
+**Date**: December 5, 2025  
+**Status**: Ready for Testing  
+**Feature**: Auto-detect and reply to messages mentioning Mohit or "The Real PM"  
+**Time Window**: Last 24 hours (1 day) for full conversation context
 
 ---
 
-## 🎯 Tasks Completed
+## 🎯 What Was Implemented
 
-### ✅ Task 1: Restructured Context Document
-**File:** `context.md`
+Your Python AI Agent now automatically detects and processes messages from the **last 24 hours** that:
 
-- Complete rewrite with PM-focused hierarchy
-- New sections:
-  - Overall Health & Risk Register
-  - Active Epics & Tasks
-  - Reminders (Managed by Agent)
-  - Raw Notes (Append Only)
-- Updated timestamp to 11:00 IST
-- Added CPO instructions note
+1. ✅ **Mention the bot**: `@The Real PM`
+2. ✅ **Mention you**: `@Mohit` (your Slack user ID)
+3. ✅ **Contain "mohit"**: Case-insensitive keyword search
+4. ✅ **Contain "the real pm"**: Case-insensitive phrase search
 
-### ✅ Task 2: Updated Drift Detector Schema
-**File:** `drift_detector.py` (lines 47-58)
-
-- Updated prompt to request new section names
-- Changed JSON schema keys:
-  - `suggested_update_to_overall_health_and_risk`
-  - `suggested_update_to_active_epics_and_tasks`
-- Added 'Medium' risk level option
-- Updated corresponding logic in `main.py` (lines 69-100)
-
-### ✅ Task 3: Implemented Dual-Output Command Processing
-**File:** `main.py`
-
-#### 3.1: Added Helper Function (lines 27-47)
-```python
-def extract_json_block(text: str) -> list:
-    """Safely extracts a JSON list enclosed in a markdown code block."""
-```
-- Regex-based extraction from ```json code blocks
-- Fallback to plain JSON parsing
-- Returns empty array on failure
-
-#### 3.2: Updated LLM Prompt (lines 301-347)
-- Requests **both** readable text AND structured JSON
-- Provides example JSON output
-- Clear instructions for two-part response
-
-#### 3.3: Refactored Execution Logic (lines 350-465)
-- Uses `extract_json_block()` helper
-- Displays count of structured actions found
-- Type-based action execution:
-  - `schedule_reminder` → Schedules Slack message
-  - `update_context_task` → Logs intent (placeholder for future)
-- Clear success/failure indicators
-
-### ✅ Task 4: Enhanced State Manager
-**File:** `state_manager.py` (lines 48-93)
-
-- Added `append` parameter to `update_section()`
-- Supports both replace and append modes
-- Enables audit trail in Raw Notes section
+**Key Features**:
+- **Smart deduplication**: Same message matching multiple criteria is processed only once
+- **Security-first**: Only YOUR messages are processed; others get a polite refusal
+- **AI-powered**: Analyzes intent and proposes structured actions
+- **Interactive approval**: You review and approve before any action is executed
 
 ---
 
-## 📊 Files Modified
+## 📁 Files Modified
 
-| File | Lines Changed | Status | Description |
-|------|---------------|--------|-------------|
-| `context.md` | Full rewrite | ✅ | New PM structure |
-| `drift_detector.py` | 47-58 | ✅ | New schema |
-| `main.py` (helper) | 27-47 | ✅ | JSON extraction |
-| `main.py` (prompt) | 301-347 | ✅ | Dual-output request |
-| `main.py` (execution) | 350-465 | ✅ | Structured execution |
-| `main.py` (sync) | 69-100 | ✅ | New section names |
-| `state_manager.py` | 48-93 | ✅ | Append support |
+### Core Changes
+1. **`slack_tools.py`** - Enhanced `get_messages_mentions()` with keyword support
+2. **`main.py`** - Updated `run_process_mentions()` with dual detection and deduplication
 
----
-
-## 🔍 How It Works
-
-### User Flow
-
-1. **User mentions bot** in Slack with a command
-2. **Agent fetches mentions** (filtered to last 7 days, authorized user only)
-3. **LLM analyzes** and generates dual output:
-   ```
-   ANALYSIS COMPLETE
-   
-   Found Items:
-   1. Reminder: Remind Mohit to take update from Pravin at 11:30 AM tomorrow
-   
-   Proposed Actions:
-   ✓ Schedule reminder for 2025-12-06T11:30:00
-   
-   ```json
-   [
-     {
-       "action_type": "schedule_reminder",
-       "reasoning": "Remind Mohit to take update from Pravin",
-       "data": {
-         "target_channel_id": "C08JF2UFCR1",
-         "target_user_ids": ["U07FDMFFM5F"],
-         "time_iso": "2025-12-06T11:30:00"
-       }
-     }
-   ]
-   ```
-   ```
-4. **User reviews** readable analysis
-5. **User approves** (y/n)
-6. **Agent executes** structured actions
-7. **Results displayed** with ✓/✗ indicators
-
-### Technical Flow
-
-```
-Slack Mention
-    ↓
-get_messages_mentions() [7-day filter, authorized user only]
-    ↓
-LLM Analysis [Dual Output: Text + JSON]
-    ↓
-extract_json_block() [Parse JSON from markdown]
-    ↓
-User Approval
-    ↓
-Type-Based Execution
-    ├─ schedule_reminder → schedule_slack_message()
-    └─ update_context_task → update_section(append=True)
-    ↓
-Execution Results
-```
+### New Files Created
+1. **`test_enhanced_mentions.py`** - Comprehensive testing script
+2. **`ENHANCED_MENTIONS_GUIDE.md`** - Full documentation
+3. **`MENTIONS_QUICK_REF.md`** - Quick reference card
+4. **`ENHANCED_MENTIONS_SUMMARY.md`** - Implementation details
+5. **`MENTION_FLOW_DIAGRAM.md`** - Visual flow diagrams
+6. **`usage_examples.sh`** - Interactive usage guide
+7. **`IMPLEMENTATION_COMPLETE.md`** - This file
 
 ---
 
-## 🧪 Testing Recommendations
+## 🚀 Quick Start
 
-### 1. Test Dual-Output Parsing
+### Step 1: Verify Setup
 ```bash
-# Test with a reminder command
-python main.py process-mentions --channels C08JF2UFCR1
+python3 check_slack_setup.py
 ```
 
-**Expected:**
-- Readable analysis displayed
-- JSON block extracted successfully
-- Action count shown (e.g., "💡 Found 1 structured actions ready for execution")
-
-### 2. Test Reminder Scheduling
-Mention bot in Slack:
+Expected output:
 ```
-@The Real PM remind me tomorrow at 2pm to review PR
+✓ Bot User ID: U123456789
+✓ Your User ID: U987654321
 ```
 
-**Expected:**
-- LLM extracts time as ISO 8601
-- Reminder scheduled via Slack API
-- Success message: "✓ Scheduled reminder: ... for 2025-12-06T14:00:00"
-
-### 3. Test Context Updates
-Mention bot in Slack:
-```
-@The Real PM Umang finished the Home Page Update
-```
-
-**Expected:**
-- LLM identifies epic "Home Page Update"
-- Intent logged: "✓ Intent captured: Context update for 'Home Page Update' (Status: Completed)"
-
-### 5. Verify Interactive Agent (agent.py)
+### Step 2: Test Detection
 ```bash
-python agent.py
-# Type: "Send a message to test channel that I am testing the new agent architecture."
+python3 test_enhanced_mentions.py
 ```
 
-**Expected:**
-- Agent proposes plan: "ACTION: send_message ... Message: 'Mohit is testing...'"
-- User approves (yes)
-- Message appears in Slack
+Enter a test channel ID when prompted. The script will show you what messages are being detected.
+
+### Step 3: Try It Live
+```bash
+python3 main.py process-mentions --channels YOUR_CHANNEL_ID
+```
+
+Replace `YOUR_CHANNEL_ID` with an actual Slack channel ID (e.g., `C08JF2UFCR1`).
 
 ---
 
-## 🚀 Next Steps
+## 📋 Testing Checklist
 
-### Immediate (Ready to Use)
-- ✅ Test `process-mentions` with real Slack commands
-- ✅ Test `sync` mode with new context structure
-- ✅ Verify JSON extraction with various LLM responses
-- ✅ Verify Interactive Agent (`agent.py`) flow
+Create these test messages in a Slack channel to verify the feature:
 
-### Short-Term Enhancements
-- [ ] Implement smart context.md epic updates (not just Raw Notes)
-- [ ] Add more action types (e.g., `send_email`, `create_jira_ticket`)
-- [ ] Add action history tracking in context.md
-- [ ] Create unit tests for `extract_json_block()`
+- [ ] **Test 1**: `@The Real PM schedule a meeting tomorrow at 2pm`
+  - Expected: ✅ Detected (bot mention)
 
-### Long-Term Vision
-- [ ] Multi-turn conversation for clarification
-- [ ] Proactive drift detection (scheduled cron job)
-- [ ] Integration with project management tools (Jira, Linear)
-- [ ] Natural language queries ("What's blocking the alpha release?")
+- [ ] **Test 2**: `Hey mohit, can you review the PR?`
+  - Expected: ✅ Detected (keyword "mohit")
+
+- [ ] **Test 3**: `Ask the real pm about the deployment`
+  - Expected: ✅ Detected (phrase "the real pm")
+
+- [ ] **Test 4**: `@Mohit what's the status?`
+  - Expected: ✅ Detected (user mention)
+
+- [ ] **Test 5**: `@Mohit ask the real pm to remind me`
+  - Expected: ✅ Detected (multiple triggers, deduplicated)
+
+- [ ] **Test 6**: `The project is on track`
+  - Expected: ❌ NOT detected (no triggers)
+
+---
+
+## 💡 How to Use
+
+### Basic Usage
+```bash
+# Process mentions in one channel
+python3 main.py process-mentions --channels C08JF2UFCR1
+
+# Process mentions in multiple channels
+python3 main.py process-mentions --channels C08JF2UFCR1 C08JF2UFCR2
+```
+
+### Approval Process
+
+After the AI analyzes messages, you'll see:
+
+```
+════════════════════════════════════════════════════════════
+AGENT ANALYSIS
+════════════════════════════════════════════════════════════
+[Human-readable analysis]
+[JSON action plan]
+════════════════════════════════════════════════════════════
+
+Approve and execute? [y/n/u to update]:
+```
+
+**Your options**:
+- **`y`** - Execute all proposed actions
+- **`n`** - Cancel everything
+- **`u`** - Update mode (edit or delete individual actions)
+
+### Update Mode
+
+If you choose `u`, you can:
+- `delete 2` - Remove action #2
+- `edit 1` - Modify action #1
+- `done` - Finish editing and execute
+- `cancel` - Abort everything
+
+---
+
+## 🔒 Security Features
+
+✅ **Only authorized user (you) can execute commands**  
+✅ **Unauthorized users get a polite refusal message**  
+✅ **Bot's own messages are filtered out**  
+✅ **1-day (24-hour) time window for full conversation context**  
+✅ **Past-time reminders are automatically skipped**  
+✅ **Duplicate reminders are avoided**  
 
 ---
 
 ## 📚 Documentation
 
-- **Full Refactoring Details:** See `REFACTORING_SUMMARY.md`
-- **Agent Instructions:** See `agent_instruction.txt`
-- **Context Structure:** See `context.md`
-- **Interactive Guide:** See `INTERACTIVE_GUIDE.md`
+| File | Purpose |
+|------|---------|
+| `ENHANCED_MENTIONS_GUIDE.md` | Comprehensive guide with examples and troubleshooting |
+| `MENTIONS_QUICK_REF.md` | Quick reference card for common commands |
+| `MENTION_FLOW_DIAGRAM.md` | Visual flow diagrams and examples |
+| `ENHANCED_MENTIONS_SUMMARY.md` | Technical implementation details |
+| `usage_examples.sh` | Interactive usage examples (run with `./usage_examples.sh`) |
 
 ---
 
-## 🎉 Success Metrics
+## 🎨 Action Types
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| **Regex Patterns** | 5+ complex patterns | 0 | 100% reduction |
-| **API Calls** | 2 (text + JSON) | 1 (dual output) | 50% reduction |
-| **Token Costs** | Higher | Lower | ~40% savings |
-| **Maintainability** | Low (brittle regex) | High (type-safe) | Significant |
-| **Extensibility** | Hard (add patterns) | Easy (add schema) | Significant |
-| **User Experience** | Text-only | Text + structured | Enhanced |
-| **Interactivity** | CLI flags only | Natural Language Chat | New Capability |
+The AI can propose these actions:
+
+1. **`schedule_reminder`** - Schedule a future Slack message
+2. **`send_message`** - Send an immediate message
+3. **`draft_reply`** - Draft a reply for your approval
+4. **`update_context_task`** - Update project context (context.md)
 
 ---
 
-## 🙏 Credits
+## 🔧 Configuration
 
-**Architecture:** Senior AI Architect approach with PM rigor  
-**Implementation:** Dual-output structured processing with Gemini Function Calling  
-**Validation:** CPO-approved specifications
+Your `.env` file should have:
+
+```bash
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_BOT_USER_ID=U123456789  # The bot's user ID
+SLACK_USER_ID=U987654321      # Your (Mohit's) user ID
+```
+
+### Customization Options
+
+**Add more keywords** (edit `main.py` line ~238):
+```python
+search_keywords = ["mohit", "the real pm", "your-keyword"]
+```
+
+**Change time window** (edit `main.py` line ~246):
+```python
+days=14  # Look back 14 days instead of 7
+```
+
+**Custom refusal message** (edit `main.py` line ~281):
+```python
+refusal_message = "Your custom message here"
+```
 
 ---
 
-**Status:** ✅ **READY FOR PRODUCTION TESTING**
+## 🐛 Troubleshooting
 
-All tasks complete. The agent is now ready for real-world testing with the new dual-output structured command processing system.
+### Problem: No messages found
+**Solution**: Make sure bot is in the channel
+```bash
+# In Slack, type:
+/invite @The Real PM
+```
 
+### Problem: Wrong user ID
+**Solution**: Check your .env file
+```bash
+python3 check_slack_setup.py
+```
+
+### Problem: Bot not responding
+**Solution**: Verify bot permissions
+- Required: `channels:history`, `chat:write`, `chat:write.public`
+
+---
+
+## 📊 What's Different?
+
+### Before Enhancement
+- Only detected: `@The Real PM` mentions
+- Missed: Casual references like "mohit" or "the real pm"
+- Time window: 7 days
+
+### After Enhancement
+- Detects: `@The Real PM`, `@Mohit`, "mohit", "the real pm"
+- Captures: More conversational and informal mentions
+- Deduplicates: Same message matching multiple criteria
+- Time window: **1 day (24 hours)** for full conversation context
+
+---
+
+## ✨ Examples in Action
+
+### Example 1: Casual Mention
+**Slack**: "Hey team, mohit wanted us to prioritize the login bug"  
+**Result**: ✅ Detected → AI may propose `send_message` or `update_context_task`
+
+### Example 2: Indirect Bot Reference
+**Slack**: "Can someone ask the real pm to schedule a sync tomorrow?"  
+**Result**: ✅ Detected → AI may propose `schedule_reminder`
+
+### Example 3: Multiple Triggers
+**Slack**: "@Mohit can you ask the real pm to remind me about the demo?"  
+**Result**: ✅ Detected (deduplicated) → AI may propose `schedule_reminder`
+
+---
+
+## 🎯 Next Steps
+
+1. **Run the test script**:
+   ```bash
+   python3 test_enhanced_mentions.py
+   ```
+
+2. **Create test messages** in a Slack channel using the examples above
+
+3. **Process the mentions**:
+   ```bash
+   python3 main.py process-mentions --channels YOUR_CHANNEL_ID
+   ```
+
+4. **Review the AI's analysis** and approve/edit as needed
+
+5. **Monitor the results** and adjust keywords/settings if needed
+
+---
+
+## 📞 Need Help?
+
+- **View usage examples**: `./usage_examples.sh`
+- **Read the full guide**: `ENHANCED_MENTIONS_GUIDE.md`
+- **Quick reference**: `MENTIONS_QUICK_REF.md`
+- **Flow diagrams**: `MENTION_FLOW_DIAGRAM.md`
+
+---
+
+## ✅ Verification
+
+All code has been:
+- ✅ Syntax-checked (compiles successfully)
+- ✅ Documented comprehensively
+- ✅ Tested for basic functionality
+- ✅ Backward compatible with existing features
+- ✅ Security-reviewed
+
+**Status**: 🟢 Ready for Production Testing
+
+---
+
+**Enjoy your enhanced AI agent! 🚀**
