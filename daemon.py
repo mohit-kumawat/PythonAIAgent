@@ -564,11 +564,13 @@ def main():
     log(f"Memory database: {memory.db_path}")
     
     # Schedule jobs
-    schedule.every(5).minutes.do(check_mentions_job, manager=manager, channel_ids=channel_ids)
+    # Schedule jobs
+    # USER REQUEST: Run hourly to prevent spam on the server
+    schedule.every(1).hour.do(check_mentions_job, manager=manager, channel_ids=channel_ids)
     schedule.every(10).seconds.do(execute_approved_actions_job)
     
     # Proactive jobs
-    schedule.every(30).minutes.do(run_proactive_check_job, channel_ids=channel_ids)
+    schedule.every(1).hour.do(run_proactive_check_job, channel_ids=channel_ids)
     schedule.every().friday.at("17:00").do(run_weekly_report_job)
     schedule.every(1).hour.do(cleanup_queue_job)
     
