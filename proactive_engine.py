@@ -4,6 +4,7 @@ Detects stale tasks, blockers, and generates automatic suggestions.
 """
 
 import re
+import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import uuid
@@ -104,7 +105,29 @@ class ProactiveEngine:
                     continue
         
         return stale_items
-    
+
+    def _was_recently_suggested(self, content: str, days: int = 1) -> bool:
+        """Check if this content was suggesting in the last N days."""
+        # Get recent decisions from memory
+        recent_decisions = self.memory.get_decision_history(limit=50)
+        
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        for decision in recent_decisions:
+            created_at = datetime.strptime(decision['created_at'], '%Y-%m-%d %H:%M:%S')
+            if created_at < cutoff:
+                continue
+                
+            # Check if data matches
+            if decision.get('action_data'):
+                try:
+                    data = json.loads(decision['action_data'])
+                    if data.get('original_content') == content:
+                        return True
+                except:
+                    pass
+        return False
+
     def detect_blockers(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Scan messages for blocker patterns.
@@ -265,25 +288,8 @@ class ProactiveEngine:
         ])
         
         return '\n'.join(lines)
-    
-    def get_proactive_suggestions(
-        self,
-        context_md: str,
-        messages: List[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Generate all proactive suggestions.
-        
-        Combines:
-        - Stale task detection
-        - Blocker detection
-        - Urgency detection
-        
-        Returns:
-            List of action suggestions for the pending queue
-        """
-        suggestions = []
-        
+
+
         # Check for stale tasks
         stale_tasks = self.check_stale_tasks(context_md)
         for task in stale_tasks:

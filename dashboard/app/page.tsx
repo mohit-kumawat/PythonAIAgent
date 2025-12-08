@@ -84,6 +84,84 @@ export default function Dashboard() {
     }
   };
 
+  const renderActionData = (action: Action) => {
+    const { action_type, data } = action;
+
+    if (action_type === 'proactive_followup' || data.source === 'stale_task_detection') {
+      return (
+        <div className="bg-black/30 p-3 rounded text-sm space-y-2 mb-4 border border-gray-700">
+          <div>
+            <span className="text-gray-500 text-xs uppercase tracking-wider">Original Task</span>
+            <div className="text-gray-300 mt-1">{data.original_content}</div>
+          </div>
+          <div>
+            <span className="text-purple-400 text-xs uppercase tracking-wider">Suggested Action</span>
+            <div className="text-purple-200 mt-1 font-medium">{data.suggested_action}</div>
+          </div>
+          {data.days_old && (
+            <div className="text-xs text-gray-600 mt-2">
+              ⚠️ Inactive for {data.days_old} days
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (action_type === 'schedule_reminder') {
+      return (
+        <div className="bg-black/30 p-3 rounded text-sm space-y-2 mb-4 border border-gray-700">
+          <div>
+            <span className="text-gray-500 text-xs uppercase tracking-wider">Reminder Message</span>
+            <div className="text-gray-300 mt-1">{data.message_text || action.reasoning}</div>
+          </div>
+          <div>
+            <span className="text-blue-400 text-xs uppercase tracking-wider">Scheduled For</span>
+            <div className="text-blue-200 mt-1 font-mono">{new Date(data.time_iso).toLocaleString()}</div>
+          </div>
+          <div className="text-xs text-gray-600 mt-1">
+            Channel: {data.target_channel_id}
+          </div>
+        </div>
+      );
+    }
+
+    if (action_type === 'send_message' || action_type === 'draft_reply') {
+      return (
+        <div className="bg-black/30 p-3 rounded text-sm space-y-2 mb-4 border border-gray-700">
+          <div>
+            <span className="text-gray-500 text-xs uppercase tracking-wider">Message Content</span>
+            <div className="text-gray-300 mt-1 whitespace-pre-wrap border-l-2 border-gray-600 pl-3">{data.message_text}</div>
+          </div>
+          <div className="text-xs text-gray-600 mt-1">
+            Target Channel: {data.target_channel_id}
+          </div>
+        </div>
+      );
+    }
+
+    if (action_type === 'send_email_summary' || action_type === 'weekly_report') {
+      return (
+        <div className="bg-black/30 p-3 rounded text-sm space-y-2 mb-4 border border-gray-700">
+          <div>
+            <span className="text-gray-500 text-xs uppercase tracking-wider">Report Type</span>
+            <div className="text-gray-300 mt-1">{action_type === 'weekly_report' ? 'Weekly Status Report' : 'Email Summary'}</div>
+          </div>
+          <div>
+            <span className="text-gray-500 text-xs uppercase tracking-wider">Recipient</span>
+            <div className="text-gray-300 mt-1">{data.recipient || 'Me'}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default Fallback
+    return (
+      <div className="bg-black/30 p-2 rounded text-xs font-mono text-gray-400 mb-4 overflow-x-auto max-h-24 overflow-y-auto">
+        {JSON.stringify(data, null, 2)}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans p-6">
       {/* Header */}
@@ -97,12 +175,12 @@ export default function Dashboard() {
         <div className="text-right">
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Status</div>
           <div className={`inline-flex items-center px-3 py-1 rounded-full border ${status.status === 'THINKING' ? 'bg-yellow-900/30 border-yellow-500 text-yellow-300' :
-              status.status === 'EXECUTING' ? 'bg-green-900/30 border-green-500 text-green-300' :
-                'bg-gray-700 border-gray-600 text-gray-300'
+            status.status === 'EXECUTING' ? 'bg-green-900/30 border-green-500 text-green-300' :
+              'bg-gray-700 border-gray-600 text-gray-300'
             }`}>
             <span className={`w-2 h-2 rounded-full mr-2 ${status.status === 'THINKING' ? 'bg-yellow-400 animate-pulse' :
-                status.status === 'EXECUTING' ? 'bg-green-400 animate-pulse' :
-                  'bg-gray-400'
+              status.status === 'EXECUTING' ? 'bg-green-400 animate-pulse' :
+                'bg-gray-400'
               }`}></span>
             {status.status || 'OFFLINE'}
           </div>
@@ -155,9 +233,9 @@ export default function Dashboard() {
               ) : (
                 logs.map((log, i) => (
                   <div key={i} className={`${log.includes('Error') || log.includes('failed') ? 'text-red-400' :
-                      log.includes('successfully') || log.includes('Added') ? 'text-green-400' :
-                        log.includes('Starting') || log.includes('Running') ? 'text-yellow-400' :
-                          'text-gray-500'
+                    log.includes('successfully') || log.includes('Added') ? 'text-green-400' :
+                      log.includes('Starting') || log.includes('Running') ? 'text-yellow-400' :
+                        'text-gray-500'
                     }`}>
                     {log}
                   </div>
@@ -174,8 +252,8 @@ export default function Dashboard() {
             <button
               onClick={() => setActiveTab('pending')}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === 'pending'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               Pending ({actions.length})
@@ -183,8 +261,8 @@ export default function Dashboard() {
             <button
               onClick={() => setActiveTab('history')}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === 'history'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               History
@@ -223,9 +301,7 @@ export default function Dashboard() {
                       </div>
                       <p className="text-sm text-gray-200 mb-3">{action.reasoning}</p>
 
-                      <div className="bg-black/30 p-2 rounded text-xs font-mono text-gray-400 mb-4 overflow-x-auto max-h-24 overflow-y-auto">
-                        {JSON.stringify(action.data, null, 2)}
-                      </div>
+                      {renderActionData(action)}
 
                       <div className="flex gap-2">
                         <button

@@ -190,7 +190,16 @@ def create_reminder_message(reminder_data: Dict[str, Any], target_user_ids: List
         Formatted Slack message
     """
     mentions = " ".join([f"<@{uid}>" for uid in target_user_ids])
-    message = f"{mentions} 📋 Reminder from Mohit:\n{reminder_data['action']}"
+    
+    # Clean up recursive phrasing like "Remind Mohit to..."
+    cleaned_action = reminder_data['action']
+    if cleaned_action.lower().startswith("remind "):
+        # Remove "Remind X to" or "Remind me to"
+        cleaned_action = re.sub(r'^remind\s+(?:me|mohit|<@[A-Z0-9]+>)\s+to\s+', '', cleaned_action, flags=re.IGNORECASE)
+        # Remove "Remind " prefix if just "Remind X"
+        cleaned_action = re.sub(r'^remind\s+', '', cleaned_action, flags=re.IGNORECASE)
+
+    message = f"{mentions} ⏰ *Reminder:*\n{cleaned_action}"
     
     if context:
         message += f"\n\nContext: {context}"

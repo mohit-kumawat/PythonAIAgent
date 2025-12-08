@@ -83,21 +83,22 @@ def get_self_todo(limit: int = 20) -> List[str]:
         print(f"Error fetching self-todos: {e}")
         return []
 
-def send_slack_message(channel_id: str, text: str):
+def send_slack_message(channel_id: str, text: str, thread_ts: str = None):
     """
     Sends a message to a Slack channel.
     
     Args:
         channel_id: The ID of the channel to send to.
         text: The message text.
+        thread_ts: Optional timestamp of the thread to reply to.
     """
     client = get_slack_client()
     if not client:
         return
 
     try:
-        client.chat_postMessage(channel=channel_id, text=text)
-        print(f"Message sent to {channel_id}")
+        client.chat_postMessage(channel=channel_id, text=text, thread_ts=thread_ts)
+        print(f"Message sent to {channel_id} (Thread: {thread_ts})")
     except SlackApiError as e:
         print(f"Error sending message: {e}")
 

@@ -137,8 +137,25 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
     # 2. Analyze with LLM
     try:
         context_text = read_context()
-        mentions_text = json.dumps(unique_mentions, indent=2, default=str)
+        # mentions_text moved down after filtering
         current_time = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%Y-%m-%d %H:%M:%S %Z')
+
+        # Filter out already processed messages (Simple in-memory cache for daemon run)
+        # In a real persistence layer, this should be in SQLite, but daemon runtime cache helps for now.
+        if not hasattr(check_mentions_job, "processed_ts"):
+             check_mentions_job.processed_ts = set()
+        
+        new_mentions = [m for m in unique_mentions if m['ts'] not in check_mentions_job.processed_ts]
+        
+        if not new_mentions:
+            log("No new un-processed mentions.")
+            update_status("IDLE", "No new mentions")
+            return
+
+        mentions_text = json.dumps(new_mentions, indent=2, default=str)
+        # Update cache
+        for m in new_mentions:
+            check_mentions_job.processed_ts.add(m['ts'])
         
         prompt = f"""You are The Real PM agent (Daemon Mode). Analyze these Slack messages.
         
@@ -146,10 +163,34 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         Context: {context_text}
         Messages: {mentions_text}
         
+        USER DIRECTORY (Map these IDs to names):
+        - {os.environ.get("SLACK_USER_ID")}: Mohit (Project Manager/User)
+        - {bot_user_id}: You (The Real PM Agent) - NEVER tag yourself in messages.
+        - U0A1J73B8JH: Pravin
+        - U07NJKB5HA7: Umang
+        - U07FDMFFM5F: Mohit
+        
         Generate a structured JSON plan of actions.
-        JSON format: [{{ "action_type": "...", "reasoning": "...", "data": {{...}} }}]
+        For replies, MUST include "thread_ts" in the "data" object matching the message's "ts".
+        
+        CRITICAL INSTRUCTION: Include a 'confidence' score (0-1) and 'severity' (low, medium, high) for each action.
+        If you are >0.8 confident and severity is not 'critical', the action will be auto-executed.
+        
+        JSON format: [{{ 
+            "action_type": "...", 
+            "reasoning": "...", 
+            "confidence": 0.9,
+            "severity": "low",
+            "data": {{...}} 
+        }}]
         Types: schedule_reminder, update_context_task, send_message, draft_reply, 
                send_email_summary, post_slack_poll, add_calendar_event
+        
+        WRITING & FORMATTING RULES:
+        1. Speak naturally in first-person ("I", "We"). DO NOT refer to yourself as "The Real PM" or tag yourself.
+        2. When mentioning users, ALWAYS use the <@USER_ID> format. if you only have a name, look it up in context or output plain text name.
+        3. Do NOT use raw User IDs (e.g., U12345) in text without <@...> wrappers.
+        4. For Reminders: Simplify the text. Instead of "Remind Mohit to check X", just use "Check X".
         """
         
         client = manager.get_client()
@@ -164,12 +205,33 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             # 3. Append to Pending Queue
             current_queue = get_pending_actions()
             
-            # Simple deduplication could happen here, but for now just add
-            # Add a generic ID and status
             for action in new_actions:
                 action['id'] = f"{int(time.time()*1000)}_{len(current_queue)}"
-                action['status'] = 'PENDING' # States: PENDING, APPROVED, REJECTED, EXECUTED, FAILED
                 action['created_at'] = datetime.now().isoformat()
+                
+                # AUTONOMY LOGIC:
+                # 1. Direct commands (replies) are always approved (legacy behavior)
+                # 2. High confidence (>0.8) AND non-critical severity = APPROVED
+                # 3. Everything else = PENDING (needs human review)
+                
+                confidence = float(action.get('confidence', 0.5))
+                severity = action.get('severity', 'medium').lower()
+                atype = action.get('action_type')
+
+                if atype in ['send_message', 'draft_reply']:
+                     # Direct replies to users are usually safe if confident
+                     if confidence > 0.7:
+                         action['status'] = 'APPROVED'
+                     else:
+                         action['status'] = 'PENDING'
+                
+                elif confidence > 0.85 and severity != 'high':
+                    action['status'] = 'APPROVED'
+                    log(f"Auto-approving action {action['id']} (Conf: {confidence}, Sev: {severity})")
+                
+                else:
+                    action['status'] = 'PENDING'
+                
                 current_queue.append(action)
             
             save_pending_actions(current_queue)
@@ -231,6 +293,53 @@ def run_proactive_check_job(channel_ids: list):
         log(f"Proactive check failed: {e}")
     
     update_status("IDLE", f"Proactive check complete. Queue: {len(get_pending_actions())}")
+
+
+def cleanup_queue_job():
+    """
+    Periodic job to clean up executed/rejected actions from the JSON queue.
+    Keep the file size manageable.
+    """
+    try:
+        queue = get_pending_actions()
+        if not queue:
+            return
+
+        now = datetime.now()
+        active_queue = []
+        cleaned_count = 0
+
+        for action in queue:
+            # Keep PENDING actions unless they are very old (> 3 days)
+            if action.get('status') == 'PENDING':
+                created_at = datetime.fromisoformat(action.get('created_at'))
+                if (now - created_at).days < 3:
+                     active_queue.append(action)
+                else:
+                    cleaned_count += 1
+            
+            # Keep finished actions for only 1 hour (for UI feedback)
+            elif action.get('status') in ['EXECUTED', 'FAILED', 'REJECTED_LOGGED']:
+                # If we have an executed_at time, check it
+                ts = action.get('executed_at') or action.get('created_at')
+                try:
+                    action_time = datetime.fromisoformat(ts)
+                    # If older than 1 hour, remove (they are already in SQLite history)
+                    if (now - action_time).total_seconds() < 3600:
+                        active_queue.append(action)
+                    else:
+                        cleaned_count += 1
+                except:
+                    cleaned_count += 1
+            else:
+                active_queue.append(action)
+        
+        if cleaned_count > 0:
+            save_pending_actions(active_queue)
+            log(f"Cleaned up {cleaned_count} old/completed actions from queue.")
+
+    except Exception as e:
+        log(f"Cleanup job failed: {e}")
 
 
 def run_weekly_report_job():
@@ -301,10 +410,45 @@ def execute_approved_actions_job():
                 
                 if atype == 'schedule_reminder':
                     msg = create_reminder_message({"action": action['reasoning']}, data.get('target_user_ids', []))
-                    result = schedule_slack_message(data['target_channel_id'], msg, data['time_iso'])
+                    
+                    target_channel = data.get('target_channel_id') or data.get('channel_id') or data.get('channel')
+                    if not target_channel:
+                         raise KeyError("target_channel_id/channel_id/channel not found")
+                         
+                    time_iso = data.get('time_iso') or data.get('reminder_time') or data.get('time')
+                    if not time_iso:
+                         raise KeyError("time_iso/reminder_time/time not found")
+
+                    result = schedule_slack_message(target_channel, msg, time_iso)
                     
                 elif atype == 'send_message' or atype == 'draft_reply':
-                    send_slack_message(data['target_channel_id'], data['message_text'])
+                    target_channel = (data.get('target_channel_id') or 
+                                    data.get('channel_id') or 
+                                    data.get('channel') or 
+                                    os.environ.get('SLACK_USER_ID')) # Fallback to user DM if channel missing? No, safer to fail if no channel.
+                                    
+                    msg_text = (data.get('message_text') or 
+                              data.get('text') or 
+                              data.get('message') or 
+                              data.get('reply_text'))
+                    
+                    if not target_channel:
+                         # Fallback: Try to infer from thread_ts? No, need channel.
+                         # Last resort: use the channel from the action metadata if available (it isn't currently stored outside data)
+                        raise KeyError(f"Missing channel ID. Available keys: {list(data.keys())}")
+                    
+                    if not msg_text:
+                        raise KeyError(f"Missing message text. Available keys: {list(data.keys())}")
+                    
+                    # POST-PROCESSING: Remove self-tags
+                    bot_id = os.environ.get("SLACK_BOT_USER_ID", "")
+                    if bot_id:
+                        msg_text = msg_text.replace(f"<@{bot_id}>", "")
+                    
+                    # Remove "The Real PM" text if it appears as a name
+                    msg_text = msg_text.replace("@The Real PM", "")
+
+                    send_slack_message(target_channel, msg_text, thread_ts=data.get('thread_ts'))
                     result = "Message sent"
                     
                 elif atype == 'update_context_task':
@@ -426,9 +570,11 @@ def main():
     # Proactive jobs
     schedule.every(30).minutes.do(run_proactive_check_job, channel_ids=channel_ids)
     schedule.every().friday.at("17:00").do(run_weekly_report_job)
+    schedule.every(1).hour.do(cleanup_queue_job)
     
     # Run once immediately
     check_mentions_job(manager, channel_ids)
+    cleanup_queue_job()
     
     while True:
         schedule.run_pending()
