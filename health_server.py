@@ -6,6 +6,7 @@ This keeps the service alive AND makes it check Slack every 5 minutes.
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import os
 import json
+import subprocess
 from datetime import datetime
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -17,15 +18,14 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             
-            # Prepare response data
             response = {
                 "status": "alive",
                 "service": "The Real PM Agent",
                 "timestamp": datetime.now().isoformat(),
-                "message": "Service is running. Daemon background thread active."
+                "message": "Service is running. Cron ping received."
             }
             
-            self.wfile.write(json.dumps(response, indent=2).encode())
+            self.wfile.write(json.dumps(response).encode())
             
             # Log the ping
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ✅ Health check pinged - Service kept alive")
@@ -93,8 +93,7 @@ def start_health_server(port=10000):
     print(f"🚀 Starting Daemon for channels: {channel_ids}")
     daemon_thread = threading.Thread(target=start_daemon, args=(channel_ids,), daemon=True)
     daemon_thread.start()
-    
-    # Start Health Server (Blocking)
+
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     print(f"✅ Health check server running on port {port}")
     print(f"📍 Endpoints:")
