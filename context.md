@@ -2,12 +2,12 @@
 Last Updated: 2025-12-05 11:12 IST
 
 ## 1. Overall Health & Risk Register
-- **Health:** Red (UI/UX Issues, Team Capacity, Mohit's illness)
+- **Health:** Yellow (Mohit is back in office, focused on backlog)
 - **Primary Blockers:** Bottom Navigation Bar UI Issue, follow up question buttons tap issue
 - **Risk Items:**
     - [High] Bottom Navigation Bar UI/UX issues affecting Alpha Release. Owner: TBD.
     - [High] Follow up question buttons tap issue affecting release. Owner: U0A1J73B8JH and U07NJKB5HA7.
-    - [High] Mohit's illness affecting Home Page Update and other tasks. Owner: TBD
+    - [Resolved] Mohit's illness. (Back in office 2025-12-08).
 
 ## 2. Active Epics & Tasks
 No changes to active epics or tasks.

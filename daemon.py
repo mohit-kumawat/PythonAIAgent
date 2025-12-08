@@ -200,6 +200,10 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         CRITICAL INSTRUCTION: Include a 'confidence' score (0-1) and 'severity' (low, medium, high) for each action.
         Also include 'trigger_user_id' in the JSON (the ID of the user who caused this action).
         
+        CONTEXT UPDATES:
+        If the user says "I am back", "I am good", or provides a status update that contradicts the current Context (e.g. Health: Red), 
+        generate an 'update_context_task' action to fix the context.
+        
         If you are >0.8 confident and severity is not 'critical', the action will be auto-executed.
         
         JSON format: [{{ 
