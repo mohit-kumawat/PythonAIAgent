@@ -427,6 +427,48 @@ def run_weekly_report_job():
     except Exception as e:
         log(f"Weekly report generation failed: {e}")
 
+def run_daily_status_job(type="morning"):
+    """
+    Generates a daily status update (Morning or Evening).
+    Morning (10 AM): Focus on plan for the day, blockers, and immediate actions.
+    Evening (6 PM): Focus on progress made, what's pending, and plan for tomorrow.
+    """
+    log(f"Generating daily {type} report...")
+    try:
+        context_text = read_context()
+        
+        # Custom prompt based on time of day
+        if type == "morning":
+            prompt_directive = "Generate a 'Morning Standup' update. Focus on: 1. Key goals for today. 2. Critical blockers to resolve. 3. Call to action for the team."
+        else:
+            prompt_directive = "Generate an 'End of Day' update. Focus on: 1. Progress made today. 2. What is still pending/blocked. 3. Quick look ahead for tomorrow."
+            
+        report = engine.generate_status_report(context_text, period="daily", custom_directive=prompt_directive)
+        report_text = engine.generate_report_text(report)
+        
+        # Add as auto-approved action if confident, or pending if complex
+        action = {
+            "id": f"daily-{type}-{int(time.time())}",
+            "action_type": "send_message",
+            "reasoning": f"📢 Daily {type.capitalize()} Update",
+            "status": "APPROVED", # Auto-approve daily updates
+            "created_at": datetime.now().isoformat(),
+            "confidence": 0.95,
+            "severity": "low",
+            "data": {
+                "message_text": report_text,
+                "target_channel_id": os.environ.get('SLACK_CHANNELS', '').split()[0] # Send to first channel (Main)
+            }
+        }
+        
+        current_queue = get_pending_actions()
+        current_queue.append(action)
+        save_pending_actions(current_queue)
+        log(f"Daily {type} report queued.")
+        
+    except Exception as e:
+        log(f"Daily {type} report generation failed: {e}")
+
 
 def execute_approved_actions_job():
     """
@@ -610,6 +652,11 @@ def main():
     # Proactive jobs
     schedule.every(1).hour.do(run_proactive_check_job, channel_ids=channel_ids)
     schedule.every().friday.at("17:00").do(run_weekly_report_job)
+    
+    # Daily Reports (10 AM & 6 PM)
+    schedule.every().day.at("10:00").do(run_daily_status_job, type="morning")
+    schedule.every().day.at("18:00").do(run_daily_status_job, type="evening")
+    
     schedule.every(1).hour.do(cleanup_queue_job)
     
     # Run once immediately

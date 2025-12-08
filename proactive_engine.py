@@ -198,20 +198,29 @@ class ProactiveEngine:
         
         return urgent_items
     
-    def generate_status_report(
-        self, 
-        context_md: str,
-        period: str = "weekly"
-    ) -> Dict[str, Any]:
+    def generate_status_report(self, context_text: str, period: str = "weekly", custom_directive: str = "") -> Dict[str, Any]:
         """
-        Generate a status report from context and memory.
+        Generates a status report based on the context.
+        period: 'weekly' or 'daily'
+        custom_directive: Optional specific instructions (e.g., "Morning Standup")
+        """
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        Args:
-            context_md: Current project context
-            period: "daily" or "weekly"
-            
-        Returns:
-            Structured report data
+        prompt = f"""You are The Real PM. specific task: Generate a {period} status report.
+        
+        Current Context:
+        {context_text}
+        
+        {custom_directive}
+        
+        Return a JSON object with:
+        {{
+            "title": "...",
+            "summary": "...",
+            "key_updates": ["...", "..."],
+            "blockers": ["..."],
+            "next_steps": ["..."]
+        }}
         """
         # Get stats from memory
         stats = self.memory.get_stats()
@@ -221,7 +230,7 @@ class ProactiveEngine:
         health_status = "Unknown"
         blockers_count = 0
         
-        for line in context_md.split('\n'):
+        for line in context_text.split('\n'):
             if '**Health:**' in line:
                 health_status = line.split('**Health:**')[-1].strip()
             if 'Blocker' in line or 'blocker' in line:
