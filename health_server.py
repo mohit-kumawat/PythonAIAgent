@@ -7,7 +7,37 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import os
 import json
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# Global state for health monitoring
+LAST_CHECK_TIME = None
+LAST_RUN_STATUS = "Waiting for first run..."
+
+def update_health_status(status, timestamp=None):
+    """Update the global health status from the daemon"""
+    global LAST_RUN_STATUS, LAST_CHECK_TIME
+    LAST_RUN_STATUS = status
+    LAST_CHECK_TIME = timestamp or datetime.now()
+
+def get_ist_time_str(dt):
+    """Convert datetime to IST string"""
+    if not dt:
+        return "Never"
+    
+    # Define IST timezone (UTC+5:30)
+    ist_offset = timedelta(hours=5, minutes=30)
+    # Create a fixed offset timezone for IST
+    ist_tz = timezone(ist_offset, name='IST')
+    
+    # If the datetime object is naive, assume it's UTC and convert
+    if dt.tzinfo is None:
+        # Assume dt is UTC if no timezone info, then convert to IST
+        ist_time = dt.replace(tzinfo=timezone.utc).astimezone(ist_tz)
+    else:
+        # If it has tzinfo, convert it to IST
+        ist_time = dt.astimezone(ist_tz)
+        
+    return ist_time.strftime("%Y-%m-%d %I:%M:%S %p IST")
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -18,14 +48,18 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             
+            # Prepare response data
             response = {
                 "status": "alive",
                 "service": "The Real PM Agent",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp_utc": datetime.now().isoformat(),
+                "timestamp_ist": get_ist_time_str(datetime.now()),
+                "last_check_time_ist": get_ist_time_str(LAST_CHECK_TIME),
+                "last_run_status": LAST_RUN_STATUS,
                 "message": "Service is running. Cron ping received."
             }
             
-            self.wfile.write(json.dumps(response).encode())
+            self.wfile.write(json.dumps(response, indent=2).encode())
             
             # Log the ping
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ✅ Health check pinged - Service kept alive")

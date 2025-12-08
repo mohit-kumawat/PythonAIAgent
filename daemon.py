@@ -20,6 +20,7 @@ from proactive_engine import ProactiveEngine
 from email_tools import send_email_summary
 from slack_polls import post_slack_poll
 from calendar_tools import add_calendar_event
+from health_server import update_health_status
 
 # Shared State Paths
 SERVER_STATE_DIR = "server_state"
@@ -376,6 +377,7 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         log(f"AI Analysis failed: {e}")
     
     update_status("IDLE", f"Waiting. Queue size: {len(get_pending_actions())}")
+    update_health_status("IDLE - Last check success", datetime.now())
 
 
 def run_proactive_check_job(channel_ids: list):
