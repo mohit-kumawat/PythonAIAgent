@@ -96,6 +96,12 @@ def send_slack_message(channel_id: str, text: str, thread_ts: str = None):
     if not client:
         return
 
+    # CRITICAL: Prevent bot from messaging itself
+    bot_user_id = os.environ.get("SLACK_BOT_USER_ID")
+    if bot_user_id and channel_id == bot_user_id:
+        print(f"[BLOCKED] Attempted to send message to self (Bot ID: {bot_user_id}). Skipping.")
+        return
+
     try:
         client.chat_postMessage(channel=channel_id, text=text, thread_ts=thread_ts)
         print(f"Message sent to {channel_id} (Thread: {thread_ts})")
