@@ -19,3 +19,16 @@ No changes to active epics or tasks.
 
 ## 4. Raw Notes (Append Only)
 - Context initialized for testing dual-output processing.
+
+## 5. Release Notes
+### v0.0.1 (2025-12-08) - The "Cloud" Update
+- **Deployment**: Agent is now deployed on Render (Dockerized) and runs 24/7.
+- **Autonomy**:
+    - Auto-replies to questions (High Confidence).
+    - Requires authorized user approval for tasks (Reminders, Polls, etc.).
+- **Responsiveness**: Checks for mentions every 5 minutes.
+- **Intelligence**:
+    - Knows team members by name (Mohit, Pravin, Umang).
+    - No more self-tagging or robotic 3rd person language.
+    - Intelligent spam reduction (Hourly proactive checks).
+- **Features**: Support for Threaded Replies and Reminder Scheduling.
