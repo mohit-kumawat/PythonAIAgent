@@ -163,10 +163,22 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             update_status("IDLE", "No new mentions")
             return
 
-        mentions_text = json.dumps(new_mentions, indent=2, default=str)
+        # Double check: Ensure we haven't already replied to this THREAD in the last few seconds
+        # (Race condition prevention for rapid mentions)
+        filtered_mentions = []
+        for m in new_mentions:
+            ts = m['ts']
+            if memory.is_message_processed(ts): # Check again right before processing
+                 continue
+            filtered_mentions.append(m)
+            
+        if not filtered_mentions:
+             return
+
+        mentions_text = json.dumps(filtered_mentions, indent=2, default=str)
         
         # Mark as processed immediately to prevent double-processing during long runs
-        for m in new_mentions:
+        for m in filtered_mentions:
             memory.add_processed_message(m['ts'], m.get('channel', ''))
         
         prompt = f"""You are The Real PM agent (Daemon Mode). Analyze these Slack messages.
