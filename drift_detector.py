@@ -61,7 +61,7 @@ Return a JSON object with this schema:
 
     # 4. Call Gemini
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-flash-latest",
         contents=user_prompt,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,

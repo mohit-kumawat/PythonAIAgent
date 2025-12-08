@@ -135,7 +135,7 @@ def create_chat(client):
     ]
     
     return client.chats.create(
-        model="gemini-2.0-flash",
+        model="gemini-flash-latest",
         config=types.GenerateContentConfig(
             tools=tools,
             system_instruction="""You are a helpful personal assistant. 
@@ -400,7 +400,7 @@ Example JSON Output:
     while attempts < max_retries:
         try:
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-flash-latest",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=agent_instruction

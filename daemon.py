@@ -293,7 +293,7 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         
         client = manager.get_client()
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-flash-latest",
             contents=prompt
         )
         

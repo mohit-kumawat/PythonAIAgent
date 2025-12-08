@@ -128,7 +128,7 @@ Always craft messages in third person when notifying others about {user_name}.
 """
     
     return client.chats.create(
-        model="gemini-2.0-flash",
+        model="gemini-flash-latest",
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=0.3  # Lower temperature for more consistent formatting
