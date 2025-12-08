@@ -198,7 +198,7 @@ def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: b
                 mentions.append(msg)
                 continue
             
-            # Check for keywords if provided
+            # Check for keywords
             if include_keywords:
                 for keyword in include_keywords:
                     if keyword.lower() in text_lower:
@@ -206,12 +206,48 @@ def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: b
                         break
         
         if debug:
-            print(f"[DEBUG] Found {len(mentions)} messages with mentions or keywords")
+            print(f"[DEBUG] Filtered to {len(mentions)} messages with mentions/keywords")
         
         return mentions
         
     except SlackApiError as e:
-        # Re-raise the exception so caller can handle it
-        raise e
+        print(f"Error fetching mentions: {e}")
+        return []
 
 
+def has_bot_replied_in_thread(channel_id: str, thread_ts: str, bot_user_id: str) -> bool:
+    """
+    Check if the bot has already replied in a specific thread.
+    
+    Args:
+        channel_id: The channel ID
+        thread_ts: The thread timestamp
+        bot_user_id: The bot's user ID
+        
+    Returns:
+        True if bot has already replied in this thread, False otherwise
+    """
+    client = get_slack_client()
+    if not client or not thread_ts:
+        return False
+    
+    try:
+        # Get thread replies
+        result = client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+            limit=100
+        )
+        
+        messages = result.get("messages", [])
+        
+        # Check if any message is from the bot
+        for msg in messages:
+            if msg.get("user") == bot_user_id:
+                return True
+                
+        return False
+        
+    except SlackApiError as e:
+        print(f"Error checking thread: {e}")
+        return False

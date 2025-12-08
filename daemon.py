@@ -163,6 +163,28 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             update_status("IDLE", "No new mentions")
             return
 
+        # Filter out threads where bot has already replied (unless it's a NEW direct question)
+        from slack_tools import has_bot_replied_in_thread
+        bot_id = os.environ.get("SLACK_BOT_USER_ID")
+        
+        final_mentions = []
+        for m in new_mentions:
+            thread_ts = m.get('thread_ts') or m.get('ts')  # Use message ts if not in a thread
+            channel = m.get('channel', '')
+            
+            # If this is a threaded message and bot already replied, skip it
+            if thread_ts and thread_ts != m.get('ts'):  # It's a reply in a thread
+                if has_bot_replied_in_thread(channel, thread_ts, bot_id):
+                    log(f"Skipping message in thread {thread_ts} - bot already replied")
+                    memory.add_processed_message(m['ts'], channel)
+                    continue
+            
+            final_mentions.append(m)
+        
+        if not final_mentions:
+            log("No new mentions requiring response (bot already replied in threads)")
+            return
+
         # Double check: Ensure we haven't already replied to this THREAD in the last few seconds
         # (Race condition prevention for rapid mentions)
         filtered_mentions = []
@@ -193,6 +215,14 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         - U0A1J73B8JH: Pravin
         - U07NJKB5HA7: Umang
         - U07FDMFFM5F: Mohit
+        
+        THREAD AWARENESS RULES:
+        1. If you see messages in a thread where YOU have already replied, DO NOT reply again UNLESS:
+           - Someone directly asks you a NEW question
+           - Someone explicitly mentions you with a new request
+           - The conversation has moved to a different topic
+        2. If someone says "Mark it resolved", "It's done", "Fixed", etc., DO NOT reply. Just acknowledge internally.
+        3. NEVER repeat the same answer multiple times in one thread.
         
         Generate a structured JSON plan of actions.
         For replies, MUST include "thread_ts" in the "data" object matching the message's "ts".
