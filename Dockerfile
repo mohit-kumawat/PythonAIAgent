@@ -1,4 +1,5 @@
 # Optimized build for Python daemon only (no dashboard)
+# This is a BACKGROUND WORKER service - does not expose HTTP ports
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -20,6 +21,6 @@ COPY . .
 # Make start script executable
 RUN chmod +x start.sh
 
-# No port exposure needed for daemon-only mode
-# CMD runs the daemon directly
+# No port exposure - this is a background daemon
+# Deploy as "Background Worker" on Render, NOT "Web Service"
 CMD ["python", "daemon.py", "${SLACK_CHANNELS}"]

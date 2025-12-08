@@ -118,28 +118,26 @@ Deploy your Agent to the cloud easily using [Render](https://render.com).
 1.  **Push your code to GitHub**
     *   Make sure all your latest changes (including `Dockerfile` and `start.sh`) are committed and pushed to your GitHub repository.
 
-2.  **Create a New Web Service on Render**
-    *   Go to your Render Dashboard.
-    *   Click **New +** -> **Web Service**.
-    *   Connect your GitHub account and select your `PythonAIAgent` repository.
+2.  **Create a New Service on Render**
+    *   Go to your [Render Dashboard](https://dashboard.render.com/).
+    *   Click **"New +"** → **"Background Worker"** (NOT Web Service!)
+    *   Connect your GitHub repository.
 
 3.  **Configure the Service**
-    *   **Name**: `pm-agent-dashboard` (or any name you like)
-    *   **Runtime**: Select **Docker**.
-    *   **Region**: Choose a region close to you (e.g., Singapore, Frankfurt).
-    *   **Branch**: `main`
-    *   **Instance Type**: The "Free" tier *might* work, but "Starter" ($7/mo) is recommended for reliable performance of AI & build processes.
+    *   **Name**: `pm-agent-daemon` (or any name you prefer)
+    *   **Runtime**: Docker
+    *   **Dockerfile Path**: `./Dockerfile` (default)
+    *   **Docker Command**: Leave empty (uses CMD from Dockerfile)
 
-4.  **Add Environment Variables**
-    *   Scroll down to the **Environment Variables** section.
-    *   Click "Add Environment Variable" and add ALL keys from your local `.env` file:
-        *   `GOOGLE_API_KEY`: ...
-        *   `SLACK_BOT_TOKEN`: ...
-        *   `SLACK_APP_TOKEN`: ...
-        *   `SLACK_USER_ID`: ...
-        *   `SLACK_BOT_USER_ID`: ...
-        *   `USER_EMAIL`: ...
-        *   `SLACK_CHANNELS`: `C07FMAQ3485 C08JF2UFCR1` (Space separated list of channels to monitor)
+4.  **Set Environment Variables**
+    Click on **"Environment"** and add all your secrets:
+    ```
+    GOOGLE_API_KEY=your_google_api_key
+    SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
+    SLACK_USER_ID=U07FDMFFM5F
+    SLACK_BOT_USER_ID=U08T2AJQ1NF
+    SLACK_CHANNELS=C07FMAQ3485 C08JF2UFCR1
+    ```
 
 5.  **Deploy**
     *   Click **Create Web Service**.
