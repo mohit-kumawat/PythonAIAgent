@@ -21,6 +21,8 @@ COPY . .
 # Make start script executable
 RUN chmod +x start.sh
 
-# No port exposure - this is a background daemon
-# Deploy as "Background Worker" on Render, NOT "Web Service"
-CMD ["python", "daemon.py", "${SLACK_CHANNELS}"]
+# Expose port for Render Web Service health checks
+EXPOSE 10000
+
+# Use start.sh to run both health server and daemon
+CMD ["./start.sh"]
