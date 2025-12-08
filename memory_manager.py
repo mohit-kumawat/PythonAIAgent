@@ -56,6 +56,15 @@ class MemoryManager:
             )
         ''')
         
+        # Processed Messages table - De-duplication across restarts
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS processed_messages (
+                message_ts TEXT PRIMARY KEY,
+                channel_id TEXT,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # Knowledge table - extracted facts and patterns
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS knowledge (
@@ -85,6 +94,30 @@ class MemoryManager:
         conn.commit()
         conn.close()
     
+    def add_processed_message(self, message_ts: str, channel_id: str = ""):
+        """Mark a message as processed in the persistent DB."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                'INSERT OR IGNORE INTO processed_messages (message_ts, channel_id) VALUES (?, ?)',
+                (message_ts, channel_id)
+            )
+            conn.commit()
+        except Exception as e:
+            print(f"Error marking message processed: {e}")
+        finally:
+            conn.close()
+
+    def is_message_processed(self, message_ts: str) -> bool:
+        """Check if a message has already been processed."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT 1 FROM processed_messages WHERE message_ts = ?', (message_ts,))
+        result = cursor.fetchone()
+        conn.close()
+        return result is not None
+
     def log_decision(self, action_type: str, approved: bool, reasoning: str, action_data: dict = None) -> int:
         """
         Log a decision (approval or rejection) for learning.

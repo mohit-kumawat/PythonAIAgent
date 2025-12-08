@@ -140,25 +140,20 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         # mentions_text moved down after filtering
         current_time = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%Y-%m-%d %H:%M:%S %Z')
 
-        # Filter out already processed messages (Simple in-memory cache for daemon run)
-        # In a real persistence layer, this should be in SQLite, but daemon runtime cache helps for now.
-        if not hasattr(check_mentions_job, "processed_ts"):
-             check_mentions_job.processed_ts = set()
-        
-        # Filter 1: Exclude already processed messages
+        # Filter 1: Exclude already processed messages (Persistent Check)
         # Filter 2: Exclude messages FROM the bot itself
         bot_id = os.environ.get("SLACK_BOT_USER_ID")
         
         new_mentions = []
         for m in unique_mentions:
-            # Skip if already processed
-            if m['ts'] in check_mentions_job.processed_ts:
+            # Skip if already processed (Persistent DB Check)
+            if memory.is_message_processed(m['ts']):
                 continue
             
             # Skip if from the bot itself (prevent infinite loops)
             if bot_id and m.get('user') == bot_id:
                 log(f"Skipping own message: {m['ts']}")
-                check_mentions_job.processed_ts.add(m['ts']) # Mark as processed so we don't check again
+                memory.add_processed_message(m['ts'], m.get('channel', '')) 
                 continue
                 
             new_mentions.append(m)
@@ -169,9 +164,10 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             return
 
         mentions_text = json.dumps(new_mentions, indent=2, default=str)
-        # Update cache
+        
+        # Mark as processed immediately to prevent double-processing during long runs
         for m in new_mentions:
-            check_mentions_job.processed_ts.add(m['ts'])
+            memory.add_processed_message(m['ts'], m.get('channel', ''))
         
         prompt = f"""You are The Real PM agent (Daemon Mode). Analyze these Slack messages.
         
