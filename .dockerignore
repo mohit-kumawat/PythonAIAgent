@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+daemon.log
+
+# Memory/State
+memory/
+server_state/
+
+# Env files (handled via Render env vars)
+.env
+.env.local
+
+# Test files
+tests/
+__tests__/
+*.test.js
+*.spec.js
+
+# Documentation
+README.md
+HOW_TO_RUN.md
+API_QUOTA_FIX.md
