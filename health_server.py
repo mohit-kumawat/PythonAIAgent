@@ -109,6 +109,26 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 def start_health_server(port=10000):
     """Start a simple HTTP server for health checks"""
+    
+    # Start the Daemon in a background thread if channels are configured
+    import threading
+    from daemon import start_daemon
+    
+    # Get channels from env var (comma separated) or default
+    channels_env = os.environ.get("SLACK_CHANNELS", "")
+    if channels_env:
+        channel_ids = [c.strip() for c in channels_env.split(",") if c.strip()]
+    else:
+        # Fallback for now if env not set, but better to log warning
+        print("⚠️ WARNING: SLACK_CHANNELS env var not set! Daemon might not monitor anything.")
+        # Try to find a default from typical usage or just use C08JF2UFCR1
+        channel_ids = ["C08JF2UFCR1"] 
+        
+    print(f"🚀 Starting Daemon for channels: {channel_ids}")
+    daemon_thread = threading.Thread(target=start_daemon, args=(channel_ids,), daemon=True)
+    daemon_thread.start()
+    
+    # Start Health Server (Blocking)
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     print(f"✅ Health check server running on port {port}")
     print(f"📍 Endpoints:")

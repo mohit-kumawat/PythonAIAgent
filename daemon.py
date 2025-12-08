@@ -729,13 +729,8 @@ def execute_approved_actions_job():
         save_pending_actions(queue)
         update_status("IDLE", "Execution cycle complete")
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python daemon.py <channel_id1> [channel_id2 ...]")
-        return
-
-    channel_ids = sys.argv[1:]
-    
+def start_daemon(channel_ids: list):
+    """Start the daemon scheduler loop (blocking)"""
     try:
         manager = ClientManager()
     except Exception as e:
@@ -770,5 +765,10 @@ def main():
         time.sleep(1)
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) < 2:
+        print("Usage: python daemon.py <channel_id1> [channel_id2 ...]")
+        sys.exit(1)
+
+    channel_ids = sys.argv[1:]
+    start_daemon(channel_ids)
 
