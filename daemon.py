@@ -78,17 +78,13 @@ def save_pending_actions(actions: list):
     except Exception as e:
         log(f"Error saving pending actions: {e}")
 
-def extract_json_block(text: str) -> list:
-    import re
-    match = re.search(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1).strip())
-        except:
-            return []
+# JSON Schema is now enforced at generation time - no extraction needed
+def parse_json_response(text: str) -> list:
+    """Parse JSON response from schema-enforced generation."""
     try:
         return json.loads(text.strip())
-    except:
+    except json.JSONDecodeError as e:
+        log(f"JSON parsing error (should not happen with schema): {e}")
         return []
 
 def check_mentions_job(manager: ClientManager, channel_ids: list):
@@ -228,6 +224,40 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         for m in filtered_mentions:
             memory.add_processed_message(m['ts'], m.get('channel', ''))
         
+        # Define JSON Schema for structured output (RELIABILITY UPGRADE)
+        action_schema = {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "action_type": {
+                        "type": "STRING",
+                        "enum": ["schedule_reminder", "send_message", "update_context_task", "draft_reply", 
+                                "send_email_summary", "post_slack_poll", "add_calendar_event"]
+                    },
+                    "reasoning": {"type": "STRING"},
+                    "confidence": {"type": "NUMBER"},
+                    "severity": {"type": "STRING", "enum": ["low", "medium", "high"]},
+                    "trigger_user_id": {"type": "STRING"},
+                    "data": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "target_channel_id": {"type": "STRING"},
+                            "target_user_ids": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "message_text": {"type": "STRING"},
+                            "thread_ts": {"type": "STRING"},
+                            "time_iso": {"type": "STRING"},
+                            "epic_title": {"type": "STRING"},
+                            "new_status": {"type": "STRING"},
+                            "new_owner": {"type": "STRING"},
+                            "new_markdown_content": {"type": "STRING"}
+                        }
+                    }
+                },
+                "required": ["action_type", "reasoning", "data"]
+            }
+        }
+        
         prompt = f"""You are The Real PM agent (Daemon Mode). Analyze these Slack messages.
         
         Current Time: {current_time}
@@ -261,28 +291,15 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         5. NEVER repeat the same answer multiple times in one thread
         6. If the last message in thread_context is a resolution/completion message, DO NOT reply
         
-        Generate a structured JSON plan of actions.
-        For replies, MUST include "thread_ts" in the "data" object matching the message's "ts".
+        SMART CONTEXT UPDATES (NEW):
+        If the user confirms a task is done (e.g., "I fixed the login bug", "Deployed to production", "Bug resolved"),
+        AUTOMATICALLY generate an 'update_context_task' action to move that item to 'Completed' in the active tasks list.
+        Do not wait for an explicit 'update context' command.
         
         CRITICAL INSTRUCTION: Include a 'confidence' score (0-1) and 'severity' (low, medium, high) for each action.
         Also include 'trigger_user_id' in the JSON (the ID of the user who caused this action).
         
-        CONTEXT UPDATES:
-        If the user says "I am back", "I am good", or provides a status update that contradicts the current Context (e.g. Health: Red), 
-        generate an 'update_context_task' action to fix the context.
-        
         If you are >0.8 confident and severity is not 'critical', the action will be auto-executed.
-        
-        JSON format: [{{ 
-            "action_type": "...", 
-            "reasoning": "...", 
-            "confidence": 0.9,
-            "severity": "low",
-            "trigger_user_id": "U12345",
-            "data": {{...}} 
-        }}]
-        Types: schedule_reminder, update_context_task, send_message, draft_reply, 
-               send_email_summary, post_slack_poll, add_calendar_event
         
         WRITING & FORMATTING RULES:
         1. Speak naturally in first-person ("I", "We"). DO NOT refer to yourself as "The Real PM" or tag yourself.
@@ -292,12 +309,19 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         """
         
         client = manager.get_client()
+        
+        # Use native JSON schema enforcement (NO MORE REGEX!)
         response = client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=prompt
+            model="gemini-2.0-flash",  # Schema requires 2.0+ models
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=action_schema
+            )
         )
         
-        new_actions = extract_json_block(response.text)
+        # Direct JSON parsing - no regex needed!
+        new_actions = parse_json_response(response.text)
         
         if new_actions:
             # 3. Append to Pending Queue

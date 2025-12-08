@@ -24,25 +24,24 @@ from client_manager import ClientManager
 # Load environment variables
 load_dotenv()
 
-def extract_json_block(text: str) -> list:
-    """Safely extracts a JSON list enclosed in a markdown code block."""
+def parse_json_response(text: str) -> list:
+    """Parse JSON response from schema-enforced generation."""
     import re
     import json
-    # Regex to find a block starting with ```json and ending with ```
+    
+    # Try to find JSON block first (for backward compatibility)
     match = re.search(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL)
-    
     if match:
-        json_content = match.group(1).strip()
         try:
-            return json.loads(json_content)
-        except json.JSONDecodeError as e:
-            print(f"Warning: Failed to parse extracted JSON block: {e}")
-            return []
+            return json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
     
-    # Fallback for plain JSON output if no code block wrapper is found
+    # Try direct JSON parsing
     try:
         return json.loads(text.strip())
-    except:
+    except json.JSONDecodeError as e:
+        print(f"Warning: JSON parsing error: {e}")
         return []
 
 def run_sync_mode(manager: ClientManager, channel_ids: list, todo_sync: bool):
@@ -437,7 +436,7 @@ Example JSON Output:
         print("="*80 + "\n")
         
         # Extract the structured action plan using the new helper function
-        action_plan_json = extract_json_block(response.text)
+        action_plan_json = parse_json_response(response.text)
         
         if not action_plan_json:
             print("Warning: Could not extract structured action plan from response. No actions will be executed.")
