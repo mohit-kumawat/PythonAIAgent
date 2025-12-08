@@ -251,3 +251,35 @@ def has_bot_replied_in_thread(channel_id: str, thread_ts: str, bot_user_id: str)
     except SlackApiError as e:
         print(f"Error checking thread: {e}")
         return False
+
+
+def get_thread_context(channel_id: str, thread_ts: str) -> List[Dict[str, Any]]:
+    """
+    Get all messages in a thread for full context.
+    
+    Args:
+        channel_id: The channel ID
+        thread_ts: The thread timestamp (parent message)
+        
+    Returns:
+        List of all messages in the thread (including parent)
+    """
+    client = get_slack_client()
+    if not client or not thread_ts:
+        return []
+    
+    try:
+        # Get all thread replies including the parent message
+        result = client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+            limit=100
+        )
+        
+        messages = result.get("messages", [])
+        return messages
+        
+    except SlackApiError as e:
+        print(f"Error fetching thread context: {e}")
+        return []
+

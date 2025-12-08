@@ -203,7 +203,26 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         if not filtered_mentions:
              return
 
-        mentions_text = json.dumps(filtered_mentions, indent=2, default=str)
+        # ENHANCEMENT: Fetch full thread context for each mention
+        # This allows the AI to see ALL messages in the thread, including resolution messages
+        from slack_tools import get_thread_context
+        
+        enriched_mentions = []
+        for m in filtered_mentions:
+            thread_ts = m.get('thread_ts') or m.get('ts')
+            channel = m.get('channel', '')
+            
+            # Get full thread context if this is a threaded message
+            if thread_ts:
+                thread_messages = get_thread_context(channel, thread_ts)
+                m['thread_context'] = thread_messages
+                log(f"Fetched {len(thread_messages)} messages from thread {thread_ts}")
+            else:
+                m['thread_context'] = [m]  # Just the single message if not in a thread
+            
+            enriched_mentions.append(m)
+
+        mentions_text = json.dumps(enriched_mentions, indent=2, default=str)
         
         # Mark as processed immediately to prevent double-processing during long runs
         for m in filtered_mentions:
@@ -214,6 +233,9 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         Current Time: {current_time}
         Context: {context_text}
         Messages: {mentions_text}
+        
+        IMPORTANT: Each message now includes a 'thread_context' field with ALL messages in that thread.
+        READ THE FULL THREAD CONTEXT before deciding to respond!
         
         USER DIRECTORY (Map these IDs to names):
         - {os.environ.get("SLACK_USER_ID")}: Mohit (Project Manager/User)
@@ -227,13 +249,17 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         2. NEVER send messages to channel {bot_user_id} (that's your own DM)
         3. If you see a message from user_id {bot_user_id}, IGNORE IT COMPLETELY
         
-        THREAD AWARENESS RULES:
-        1. If you see messages in a thread where YOU have already replied, DO NOT reply again UNLESS:
+        THREAD AWARENESS RULES (CRITICAL):
+        1. READ THE FULL 'thread_context' for each message to see the entire conversation
+        2. If someone says "Mark it resolved", "It's done", "Fixed", "Resolved", etc., DO NOT reply
+        3. If you already replied in the thread AND no one asked a NEW question, DO NOT reply again
+        4. Only reply if:
            - Someone directly asks you a NEW question
            - Someone explicitly mentions you with a new request
            - The conversation has moved to a different topic
-        2. If someone says "Mark it resolved", "It's done", "Fixed", etc., DO NOT reply. Just acknowledge internally.
-        3. NEVER repeat the same answer multiple times in one thread.
+           - There's a NEW blocker or issue that needs attention
+        5. NEVER repeat the same answer multiple times in one thread
+        6. If the last message in thread_context is a resolution/completion message, DO NOT reply
         
         Generate a structured JSON plan of actions.
         For replies, MUST include "thread_ts" in the "data" object matching the message's "ts".
