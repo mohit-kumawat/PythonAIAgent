@@ -532,8 +532,13 @@ def execute_approved_actions_job():
                     # Remove "The Real PM" text if it appears as a name
                     msg_text = msg_text.replace("@The Real PM", "")
 
-                    send_slack_message(target_channel, msg_text, thread_ts=data.get('thread_ts'))
-                    result = "Message sent"
+                    # FINAL CHECK: Do not send message if target channel is Self (Bot ID)
+                    if bot_id and target_channel == bot_id:
+                         log(f"Skipping action {action['id']}: Target channel is self ({bot_id})")
+                         result = "Skipped (Self-Target)"
+                    else:
+                        send_slack_message(target_channel, msg_text, thread_ts=data.get('thread_ts'))
+                        result = "Message sent"
                     
                 elif atype == 'update_context_task':
                     if 'new_markdown_content' in data:
