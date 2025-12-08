@@ -116,7 +116,13 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             # Combine
             joined = msgs + user_msgs
             for msg in joined:
-                msg['channel_id'] = channel_id
+                msg['channel'] = channel_id
+                msg['channel_id'] = channel_id  # Keep both for compatibility
+                
+                # CRITICAL: Skip bot's own messages FIRST
+                if msg.get('user') == bot_user_id:
+                    continue
+                
                 # Filter authorized & valid
                 if msg.get('user') == authorized_user_id:
                     all_mentions.append(msg)
@@ -188,7 +194,7 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         # Double check: Ensure we haven't already replied to this THREAD in the last few seconds
         # (Race condition prevention for rapid mentions)
         filtered_mentions = []
-        for m in new_mentions:
+        for m in final_mentions:  # FIXED: Use final_mentions, not new_mentions
             ts = m['ts']
             if memory.is_message_processed(ts): # Check again right before processing
                  continue
@@ -215,6 +221,11 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         - U0A1J73B8JH: Pravin
         - U07NJKB5HA7: Umang
         - U07FDMFFM5F: Mohit
+        
+        CRITICAL RULES - PREVENT INFINITE LOOPS:
+        1. NEVER respond to messages sent by {bot_user_id} (yourself/The Real PM Agent)
+        2. NEVER send messages to channel {bot_user_id} (that's your own DM)
+        3. If you see a message from user_id {bot_user_id}, IGNORE IT COMPLETELY
         
         THREAD AWARENESS RULES:
         1. If you see messages in a thread where YOU have already replied, DO NOT reply again UNLESS:

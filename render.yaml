@@ -1,0 +1,45 @@
+services:
+  # Web Service - Free tier compatible with cron-job.org pinging
+  - type: web
+    name: python-ai-agent
+    runtime: docker
+    plan: free  # FREE TIER
+    dockerfilePath: ./Dockerfile
+    envVars:
+      # Slack Configuration
+      - key: SLACK_BOT_TOKEN
+        sync: false  # Set this in Render dashboard
+      - key: SLACK_USER_TOKEN
+        sync: false  # Set this in Render dashboard
+      - key: SLACK_BOT_USER_ID
+        sync: false
+      - key: SLACK_USER_ID
+        sync: false
+      - key: SLACK_CHANNELS
+        value: "C07FMAQ3485 C08JF2UFCR1"  # Your channel IDs
+      
+      # Google AI Configuration
+      - key: GOOGLE_API_KEY
+        sync: false  # Set this in Render dashboard
+      
+      # Email Configuration (if using email features)
+      - key: USER_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      
+      # Calendar Configuration (if using calendar features)
+      - key: GOOGLE_CALENDAR_CREDENTIALS
+        sync: false
+    
+    # Auto-restart configuration
+    autoDeploy: true  # Auto-deploy on git push
+    
+    # Health check endpoint for cron-job.org
+    healthCheckPath: /health

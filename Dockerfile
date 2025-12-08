@@ -1,5 +1,5 @@
-# Optimized build for Python daemon only (no dashboard)
-# This is a BACKGROUND WORKER service - does not expose HTTP ports
+# Optimized build for Python daemon - Render Free Tier Web Service
+# Runs health server + daemon for cron-job.org compatibility
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -21,8 +21,8 @@ COPY . .
 # Make start script executable
 RUN chmod +x start.sh
 
-# Expose port for Render Web Service health checks
+# Expose port for Render Web Service (required for free tier)
 EXPOSE 10000
 
-# Use start.sh to run both health server and daemon
+# Run health server + daemon
 CMD ["./start.sh"]
