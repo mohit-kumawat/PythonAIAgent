@@ -174,6 +174,8 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         For replies, MUST include "thread_ts" in the "data" object matching the message's "ts".
         
         CRITICAL INSTRUCTION: Include a 'confidence' score (0-1) and 'severity' (low, medium, high) for each action.
+        Also include 'trigger_user_id' in the JSON (the ID of the user who caused this action).
+        
         If you are >0.8 confident and severity is not 'critical', the action will be auto-executed.
         
         JSON format: [{{ 
@@ -181,6 +183,7 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             "reasoning": "...", 
             "confidence": 0.9,
             "severity": "low",
+            "trigger_user_id": "U12345",
             "data": {{...}} 
         }}]
         Types: schedule_reminder, update_context_task, send_message, draft_reply, 
@@ -210,26 +213,37 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
                 action['created_at'] = datetime.now().isoformat()
                 
                 # AUTONOMY LOGIC:
-                # 1. Direct commands (replies) are always approved (legacy behavior)
-                # 2. High confidence (>0.8) AND non-critical severity = APPROVED
-                # 3. Everything else = PENDING (needs human review)
+                # 1. Replies: Auto-approve if confident (Responsive)
+                # 2. Tasks: Auto-approve ONLY if commanded by the Authorized User (Mohit)
                 
                 confidence = float(action.get('confidence', 0.5))
                 severity = action.get('severity', 'medium').lower()
                 atype = action.get('action_type')
+                
+                # Get the triggering user ID (from LLM or data)
+                trigger_user = action.get('trigger_user_id') or action.get('data', {}).get('trigger_user_id')
+                authorized_user = os.environ.get('SLACK_USER_ID')
+                is_authorized = (trigger_user == authorized_user) if authorized_user else False
 
                 if atype in ['send_message', 'draft_reply']:
-                     # Direct replies to users are usually safe if confident
+                     # Direct replies are safe if confident
                      if confidence > 0.7:
                          action['status'] = 'APPROVED'
                      else:
                          action['status'] = 'PENDING'
                 
-                elif confidence > 0.85 and severity != 'high':
-                    action['status'] = 'APPROVED'
-                    log(f"Auto-approving action {action['id']} (Conf: {confidence}, Sev: {severity})")
+                elif atype in ['schedule_reminder', 'update_context_task', 'add_calendar_event', 'post_slack_poll', 'send_email_summary']:
+                     # Critical tasks: STRICTLY authorized user only
+                     if is_authorized and confidence > 0.85:
+                         action['status'] = 'APPROVED'
+                         log(f"Auto-approving authorized task {action['id']} from {trigger_user}")
+                     else:
+                         action['status'] = 'PENDING'
+                         if not is_authorized:
+                             log(f"Held unauthorized task {action['id']} from {trigger_user} (Auth: {authorized_user})")
                 
                 else:
+                    # Default for unknown types
                     action['status'] = 'PENDING'
                 
                 current_queue.append(action)
