@@ -9,11 +9,6 @@
 - LLM outputs only valid, structured JSON
 - Production-ready reliability
 
-### 🚀 **360x Faster** - Slack Events API
-- 3-5 second response time (was 30-60 minutes)
-- Instant webhook-driven responses
-- Feels like a live assistant, not a batch job
-
 ### 🧠 **Self-Maintaining** - Smart Context Updates
 - Auto-detects task completions from conversation
 - Updates context.md automatically
@@ -42,11 +37,10 @@ python3 daemon.py C08JF2UFCR1  # Your channel ID
 ```bash
 # 1. Push to Render
 git add .
-git commit -m "feat: v2.0 - JSON schema + Events API"
+git commit -m "feat: v2.0 - JSON schema + Smart Context"
 git push origin main
 
-# 2. Configure Slack Events (see SLACK_EVENTS_SETUP.md)
-# 3. Test instant response
+# 2. Test in Slack (after polling cycle)
 @The Real PM what's the status?
 ```
 
@@ -56,7 +50,6 @@ git push origin main
 
 ## Overview
 This is an intelligent PM agent that can:
-- ✅ **Respond instantly** to Slack mentions (3-5 seconds)
 - ✅ **100% reliable** action execution (native JSON schema)
 - ✅ **Auto-update** project context from conversations
 - ✅ **Schedule reminders** and manage tasks autonomously
@@ -221,7 +214,6 @@ python tests/test_drift_detector.py
 ### Technical Details
 - **[UPGRADE_SUMMARY.md](./UPGRADE_SUMMARY.md)** - Complete technical overview of v2.0
 - **[BEFORE_AFTER.md](./BEFORE_AFTER.md)** - Visual comparison of improvements
-- **[SLACK_EVENTS_SETUP.md](./SLACK_EVENTS_SETUP.md)** - Configure instant responses
 
 ### Architecture
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System architecture
@@ -234,9 +226,7 @@ python tests/test_drift_detector.py
 | Metric | v1.0 | v2.0 | Improvement |
 |--------|------|------|-------------|
 | **Parsing Success** | 90-95% | 100% | +5-10% |
-| **Response Time** | 30-60 min | 3-5 sec | **360x faster** |
 | **Context Accuracy** | 70% | 95% | +25% |
-| **User Satisfaction** | 6/10 | 9/10 | +50% |
 
 ---
 
@@ -246,13 +236,6 @@ python tests/test_drift_detector.py
 
 **"Model not found" error**  
 → Ensure using `gemini-2.0-flash` (not older models)
-
-**Webhook not triggering**  
-→ Check bot is in channel: `/invite @The Real PM`  
-→ Verify Events API is configured (see SLACK_EVENTS_SETUP.md)
-
-**Still slow responses**  
-→ Events API not configured yet. See SLACK_EVENTS_SETUP.md
 
 ### Debug Mode
 ```bash
@@ -282,10 +265,9 @@ MIT License - See LICENSE file for details
 
 ### v2.0 (2025-12-08)
 - ✅ Native JSON Schema for 100% reliable parsing
-- ✅ Slack Events API for instant responses (3-5s)
 - ✅ Smart context updates (auto-detects completions)
 - ✅ Comprehensive test suite
-- ✅ Production-ready deployment
+- ✅ Production-ready reliability
 
 ### v1.0
 - Initial release with polling-based architecture

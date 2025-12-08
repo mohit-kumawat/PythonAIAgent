@@ -67,15 +67,11 @@ curl http://localhost:10000/health
 
 # Test status
 curl http://localhost:10000/status
-
-# Test Slack events endpoint (should return 404 for GET)
-curl http://localhost:10000/slack/events
 ```
 
 **Expected**:
 - Health endpoint returns `{"status": "alive", ...}`
 - Status endpoint returns current agent status
-- Events endpoint returns 404 for GET (POST only)
 
 ---
 
@@ -93,12 +89,10 @@ git diff health_server.py
 git diff main.py
 
 # Commit
-git add daemon.py health_server.py main.py
-git add UPGRADE_SUMMARY.md SLACK_EVENTS_SETUP.md test_json_schema.py DEPLOYMENT_CHECKLIST.md
-git commit -m "feat: Add JSON schema enforcement and Slack Events API
+git add .
+git commit -m "feat: Add JSON schema enforcement and smart context
 
 - Implement native JSON schema for 100% reliable parsing
-- Add Slack Events API webhook for instant responses (3-5s)
 - Add smart context updates for proactive memory
 - Add comprehensive test suite and documentation"
 
@@ -122,13 +116,12 @@ Starting service...
 ✅ Health check server running on port 10000
 📍 Endpoints:
    - GET  /health        - Health check
-   - POST /slack/events  - Slack Events API webhook (INSTANT RESPONSE)
 ```
 
 **If deployment fails**:
 - Check for Python syntax errors in logs
 - Verify all dependencies are in `requirements.txt`
-- Ensure `gemini-1.5-flash` model is available
+- Ensure `gemini-2.0-flash` model is available
 
 ---
 
@@ -143,66 +136,9 @@ curl https://your-app-name.onrender.com/health
 
 ---
 
-## Slack Events API Setup
-
-### ✅ Step 7: Configure Slack App
-
-Follow the detailed guide in **[SLACK_EVENTS_SETUP.md](./SLACK_EVENTS_SETUP.md)**
-
-**Quick Steps**:
-
-1. **Go to Slack App Settings**
-   - https://api.slack.com/apps
-   - Select "The Real PM"
-
-2. **Enable Event Subscriptions**
-   - Navigate to "Event Subscriptions"
-   - Toggle "Enable Events" to ON
-
-3. **Set Request URL**
-   ```
-   https://your-app-name.onrender.com/slack/events
-   ```
-   - Slack will verify the URL (should see ✅ Verified)
-
-4. **Subscribe to Bot Events**
-   - Add `app_mention`
-   - (Optional) Add `message.channels` for all messages
-
-5. **Save Changes**
-   - Click "Save Changes"
-   - Reinstall app if prompted
-
----
-
-### ✅ Step 8: Test Instant Response
-
-**In Slack**:
-```
-@The Real PM what's the status of the login bug?
-```
-
-**Expected Behavior**:
-1. Message sent
-2. Within 3-5 seconds, bot responds
-3. Check Render logs:
-   ```
-   🔔 Slack event received: app_mention
-   📨 Mention from user U07FDMFFM5F in channel C08JF2UFCR1
-   ⚡ Triggered immediate analysis for channel C08JF2UFCR1
-   ```
-
-**If no response**:
-- Check Render logs for webhook errors
-- Verify bot is in the channel (`/invite @The Real PM`)
-- Confirm `app_mention` is subscribed in Slack settings
-- Test URL verification: `curl -X POST https://your-app.onrender.com/slack/events`
-
----
-
 ## Post-Deployment Validation
 
-### ✅ Step 9: Test All Three Upgrades
+### ✅ Step 7: Test Upgrades
 
 #### Test 1: JSON Schema (Reliability)
 ```
@@ -210,20 +146,11 @@ Follow the detailed guide in **[SLACK_EVENTS_SETUP.md](./SLACK_EVENTS_SETUP.md)*
 ```
 
 **Verify**:
-- Check `server_state/pending_actions.json`
+- Check `server_state/pending_actions.json` (or wait for execution)
 - Action should have perfect JSON structure
 - No parsing errors in logs
 
-#### Test 2: Instant Response (Speed)
-```
-@The Real PM what's blocking the deployment?
-```
-
-**Verify**:
-- Response within 5 seconds (not 1 hour!)
-- Render logs show instant webhook trigger
-
-#### Test 3: Smart Context Updates (Intelligence)
+#### Test 2: Smart Context Updates (Intelligence)
 ```
 @The Real PM I fixed the login bug and deployed to production
 ```
@@ -235,7 +162,7 @@ Follow the detailed guide in **[SLACK_EVENTS_SETUP.md](./SLACK_EVENTS_SETUP.md)*
 
 ---
 
-### ✅ Step 10: Monitor for 24 Hours
+### ✅ Step 8: Monitor for 24 Hours
 
 **Check Metrics**:
 ```bash
@@ -244,16 +171,12 @@ Follow the detailed guide in **[SLACK_EVENTS_SETUP.md](./SLACK_EVENTS_SETUP.md)*
 # Count parsing errors (should be 0)
 grep "JSON parsing error" server_state/agent_log.txt | wc -l
 
-# Count webhook events
-grep "Slack event received" server_state/agent_log.txt | wc -l
-
 # Count successful actions
 grep "executed successfully" server_state/agent_log.txt | wc -l
 ```
 
 **Expected**:
 - 0 parsing errors
-- Multiple webhook events (if bot is mentioned)
 - High success rate for actions
 
 ---
@@ -271,20 +194,13 @@ git revert <commit-hash>
 git push origin main
 ```
 
-#### Disable Events API
-
-1. Go to https://api.slack.com/apps
-2. Select your app → Event Subscriptions
-3. Toggle "Enable Events" to OFF
-4. Daemon will fall back to hourly polling
-
 #### Emergency Fix
 
 If daemon is crashing:
 
 ```bash
 # In daemon.py, line 291, change:
-model="gemini-1.5-flash"
+model="gemini-2.0-flash"
 # to:
 model="gemini-flash-latest"
 
@@ -301,8 +217,6 @@ model="gemini-flash-latest"
 - [ ] All tests pass (`python test_json_schema.py`)
 - [ ] Daemon starts without errors
 - [ ] Health endpoint responds correctly
-- [ ] Slack webhook URL is verified (✅ in Slack settings)
-- [ ] Bot responds within 5 seconds of mention
 - [ ] No JSON parsing errors in logs
 - [ ] Actions are executed successfully
 - [ ] Context updates automatically on task completion
@@ -312,8 +226,6 @@ model="gemini-flash-latest"
 | Metric | Target | How to Measure |
 |--------|--------|----------------|
 | Parsing Success Rate | 100% | `grep "JSON parsing error" logs` (should be 0) |
-| Response Time | < 5s | Time from mention to bot response |
-| Webhook Success Rate | > 95% | `grep "Slack event received" logs` |
 | Action Execution Rate | > 90% | Ratio of executed to generated actions |
 
 ---
@@ -322,18 +234,8 @@ model="gemini-flash-latest"
 
 ### Immediate (Week 1)
 - [ ] Monitor logs daily for errors
-- [ ] Collect user feedback on response time
+- [ ] Collect user feedback on reliability
 - [ ] Fine-tune confidence thresholds if needed
-
-### Short-term (Week 2-4)
-- [ ] Add more event types (DMs, all messages)
-- [ ] Implement webhook signature verification
-- [ ] Create monitoring dashboard
-
-### Long-term (Month 2+)
-- [ ] Disable hourly polling (fully event-driven)
-- [ ] Add rate limiting for webhooks
-- [ ] Implement advanced analytics
 
 ---
 
@@ -342,13 +244,7 @@ model="gemini-flash-latest"
 ### Common Issues
 
 **Issue**: "Schema not supported" error  
-**Fix**: Ensure using `gemini-1.5-flash` or `gemini-1.5-pro`, not `gemini-flash-latest`
-
-**Issue**: Webhook not triggering  
-**Fix**: Check bot is in channel, `app_mention` is subscribed, URL is verified
-
-**Issue**: Duplicate responses  
-**Fix**: Check `memory.is_message_processed()` is working, verify SQLite database
+**Fix**: Ensure using `gemini-2.0-flash`, not `gemini-1.5-flash`
 
 ### Debug Commands
 
@@ -358,11 +254,6 @@ curl https://your-app.onrender.com/status
 
 # View recent logs
 # (In Render dashboard → Logs tab)
-
-# Test webhook manually
-curl -X POST https://your-app.onrender.com/slack/events \
-  -H "Content-Type: application/json" \
-  -d '{"type":"url_verification","challenge":"test123"}'
 ```
 
 ---
