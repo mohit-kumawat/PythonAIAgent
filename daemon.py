@@ -145,7 +145,23 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         if not hasattr(check_mentions_job, "processed_ts"):
              check_mentions_job.processed_ts = set()
         
-        new_mentions = [m for m in unique_mentions if m['ts'] not in check_mentions_job.processed_ts]
+        # Filter 1: Exclude already processed messages
+        # Filter 2: Exclude messages FROM the bot itself
+        bot_id = os.environ.get("SLACK_BOT_USER_ID")
+        
+        new_mentions = []
+        for m in unique_mentions:
+            # Skip if already processed
+            if m['ts'] in check_mentions_job.processed_ts:
+                continue
+            
+            # Skip if from the bot itself (prevent infinite loops)
+            if bot_id and m.get('user') == bot_id:
+                log(f"Skipping own message: {m['ts']}")
+                check_mentions_job.processed_ts.add(m['ts']) # Mark as processed so we don't check again
+                continue
+                
+            new_mentions.append(m)
         
         if not new_mentions:
             log("No new un-processed mentions.")
