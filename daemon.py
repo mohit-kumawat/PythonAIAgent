@@ -746,9 +746,9 @@ def main():
     log(f"Memory database: {memory.db_path}")
     
     # Schedule jobs
-    # Schedule jobs
-    # USER REQUEST: Run hourly to prevent spam on the server
-    schedule.every(1).hour.do(check_mentions_job, manager=manager, channel_ids=channel_ids)
+    # Job 1: Check for mentions (Main input loop) - Process every 5 minutes
+    # This ensures max 5 min response time for user mentions
+    schedule.every(5).minutes.do(check_mentions_job, manager=manager, channel_ids=channel_ids)
     schedule.every(10).seconds.do(execute_approved_actions_job)
     
     # Proactive jobs
