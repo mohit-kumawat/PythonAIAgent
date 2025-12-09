@@ -305,15 +305,18 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         6. **No Hallucinations**: Do not make up User IDs. Use <@USER_ID> only if known or parsed from the message.
         7. **Reply in Thread**: When responding to a message, always use the same thread_ts to keep conversations organized.
         
+        
         TOOLS AVAILABLE:
         - `send_message`: Send immediate text to a channel or user (use 'draft_reply' for direct responses to the triggering user).
         - `draft_reply`: Generate a direct reply to the user who asked the question (preferred for answering questions).
         - `schedule_reminder`: Schedule a message for the future.
         - `update_context_task`: Update the project status/tasks.
-        - `post_slack_poll`: Create a voting poll (MUST include trigger_user_id for authorization).
+        - `post_slack_poll`: Create a voting poll (MUST include trigger_user_id for authorization). DO NOT send a separate confirmation message - the poll itself is the confirmation.
         - `add_calendar_event`: Schedule a meeting.
         
         IMPORTANT: Every action MUST have trigger_user_id set to the user who sent the message (extract from message 'user' field).
+        
+        NOTE: When creating polls, reminders, or calendar events, DO NOT generate a separate send_message action to confirm. The action itself is the confirmation.
         """
         
         client = manager.get_client()
@@ -371,11 +374,12 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
                         log(f"⚠️ BLOCKED asking Mohit to clarify his own question: '{message_text[:50]}...'")
                         continue  # Skip this action
                 
-                # RULE 3: Don't send messages that mention/tag the bot itself
+                # RULE 3: Don't send messages that mention/tag the bot itself with actual Slack tags
+                # Only block actual Slack tags like <@U123BOT>, not plain text mentions
                 bot_id = os.environ.get('SLACK_BOT_USER_ID')
                 if bot_id:
-                    # Check if message tags the bot
-                    if f'<@{bot_id}>' in message_text or '@The Real PM' in message_text:
+                    # Check if message contains an actual Slack tag of the bot
+                    if f'<@{bot_id}>' in message_text:
                         log(f"⚠️ BLOCKED message that tags the bot itself: '{message_text[:50]}...'")
                         continue  # Skip this action
                 
