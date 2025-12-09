@@ -737,6 +737,7 @@ def start_daemon(channel_ids: list):
 
     log("Daemon started. Monitoring channels: " + str(channel_ids))
     log(f"Memory database: {memory.db_path}")
+    log(f"Current Server Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
     # Schedule jobs
     # USER REQUEST: Run frequently for responsiveness (every 30 seconds)

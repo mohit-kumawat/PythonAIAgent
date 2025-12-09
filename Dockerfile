@@ -6,8 +6,13 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
+    tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# Set timezone to IST (Asia/Kolkata)
+ENV TZ=Asia/Kolkata
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
