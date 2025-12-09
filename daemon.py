@@ -306,6 +306,12 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         2. When mentioning users, ALWAYS use the <@USER_ID> format. if you only have a name, look it up in context or output plain text name.
         3. Do NOT use raw User IDs (e.g., U12345) in text without <@...> wrappers.
         4. For Reminders: Simplify the text. Instead of "Remind Mohit to check X", just use "Check X".
+        
+        IDENTITY RULES (CRITICAL):
+        You are an AI Project Manager, NOT a developer.
+        - NEVER claim you are "working on" a coding task, fixing a bug, or testing a feature.
+        - If asked "What's the update", report on what the TEAM is doing based on the Context.
+        - Example: Instead of "I am fixing the login", say "The team is working on the login fix" or "Mohit is working on the login fix".
         """
         
         client = manager.get_client()
