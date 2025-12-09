@@ -83,7 +83,9 @@ def start_health_server(port=10000):
     # Get channels from env var (comma separated) or default
     channels_env = os.environ.get("SLACK_CHANNELS", "")
     if channels_env:
-        channel_ids = [c.strip() for c in channels_env.split(",") if c.strip()]
+        # Handle both comma and space separation
+        normalized = channels_env.replace(" ", ",")
+        channel_ids = [c.strip() for c in normalized.split(",") if c.strip()]
     else:
         # Fallback for now if env not set, but better to log warning
         print("⚠️ WARNING: SLACK_CHANNELS env var not set! Daemon might not monitor anything.")

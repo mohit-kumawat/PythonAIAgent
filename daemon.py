@@ -739,8 +739,8 @@ def start_daemon(channel_ids: list):
     log(f"Memory database: {memory.db_path}")
     
     # Schedule jobs
-    # USER REQUEST: Run hourly to prevent spam on the server
-    schedule.every(1).hour.do(check_mentions_job, manager=manager, channel_ids=channel_ids)
+    # USER REQUEST: Run frequently for responsiveness (every 30 seconds)
+    schedule.every(30).seconds.do(check_mentions_job, manager=manager, channel_ids=channel_ids)
     schedule.every(10).seconds.do(execute_approved_actions_job)
     
     # Proactive jobs
