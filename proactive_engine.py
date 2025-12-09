@@ -235,7 +235,7 @@ class ProactiveEngine:
         3. Do NOT just list system stats. Focus on:
            - What is achieved?
            - What is blocked?
-           - *Team Focus: Briefly list what each person (Mohit, Pravin, Umang, Badal) has on their plate today.*
+           - *Team Focus: Detail the specific deliverables and active tasks for each team member (Mohit, Pravin, Umang, Badal) based on the context. Avoid generic statements.*
            - Call to Action / Next Steps.
         4. If it is high-level, keep it high-level. If detailed, be detailed.
         5. Tone: Professional, clear, confident project manager.
