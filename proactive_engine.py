@@ -231,6 +231,10 @@ class ProactiveEngine:
            - What is the plan?
         4. If it is high-level, keep it high-level. If detailed, be detailed.
         5. Tone: Professional, clear, confident project manager.
+        6. FORMATTING RULES (CRITICAL):
+           - Use single asterisks for *bold text* (e.g., *Heading*). Do NOT use double asterisks (**).
+           - Use bullet points (•) for lists.
+           - Keep it clean and easy to read on mobile.
         """
         
         response = client.models.generate_content(
