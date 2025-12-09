@@ -200,103 +200,53 @@ class ProactiveEngine:
     
     def generate_status_report(self, context_text: str, period: str = "weekly", custom_directive: str = "") -> Dict[str, Any]:
         """
-        Generates a status report based on the context.
-        period: 'weekly' or 'daily'
-        custom_directive: Optional specific instructions (e.g., "Morning Standup")
+        Generates a status report by asking the LLM to summarize the context.
         """
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        prompt = f"""You are The Real PM. specific task: Generate a {period} status report.
+        # We need the client to generate content
+        from client_manager import ClientManager
+        from google.genai import types
         
-        Current Context:
+        cm = ClientManager()
+        client = cm.get_client()
+        
+        prompt = f"""You are The Real PM. 
+        Task: Generate a high-quality {period} status report for the team.
+        
+        Current Time: {current_time}
+        
+        PROJECT CONTEXT:
         {context_text}
         
+        DIRECTIVE:
         {custom_directive}
         
-        Return a JSON object with:
-        {{
-            "title": "...",
-            "summary": "...",
-            "key_updates": ["...", "..."],
-            "blockers": ["..."],
-            "next_steps": ["..."]
-        }}
+        INSTRUCTIONS:
+        1. Digest the context above (Tasks, Epics, Blockers, Health).
+        2. Write a professional, concise status update message.
+        3. Do NOT just list system stats. Focus on:
+           - What is achieved?
+           - What is blocked?
+           - What is the plan?
+        4. If it is high-level, keep it high-level. If detailed, be detailed.
+        5. Tone: Professional, clear, confident project manager.
         """
-        # Get stats from memory
-        stats = self.memory.get_stats()
-        recent_actions = self.memory.get_action_history(limit=20)
         
-        # Parse context for current state
-        health_status = "Unknown"
-        blockers_count = 0
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         
-        for line in context_text.split('\n'):
-            if '**Health:**' in line:
-                health_status = line.split('**Health:**')[-1].strip()
-            if 'Blocker' in line or 'blocker' in line:
-                blockers_count += 1
-        
-        # Count actions by type
-        action_counts = {}
-        for action in recent_actions:
-            atype = action.get('action_type', 'unknown')
-            action_counts[atype] = action_counts.get(atype, 0) + 1
-        
-        # Calculate success rate
-        successful = len([a for a in recent_actions if a.get('status') == 'SUCCESS'])
-        success_rate = round(successful / len(recent_actions) * 100, 1) if recent_actions else 0
-        
-        report = {
+        return {
             "period": period,
-            "generated_at": datetime.now().isoformat(),
-            "summary": {
-                "health_status": health_status,
-                "blockers_count": blockers_count,
-                "total_actions": stats.get('total_actions', 0),
-                "successful_actions": stats.get('successful_actions', 0),
-                "success_rate": success_rate,
-                "approval_rate": stats.get('approval_rate', 0),
-                "knowledge_entries": stats.get('knowledge_entries', 0)
-            },
-            "action_breakdown": action_counts,
-            "recent_actions": recent_actions[:10]
+            "report_text": response.text,
+            "generated_at": current_time
         }
-        
-        return report
     
     def generate_report_text(self, report: Dict[str, Any]) -> str:
-        """Convert structured report to readable text."""
-        summary = report.get('summary', {})
-        
-        lines = [
-            f"📊 {report.get('period', 'Weekly').title()} Status Report",
-            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} IST",
-            "",
-            "═" * 40,
-            "",
-            "📈 KEY METRICS",
-            f"  • Health Status: {summary.get('health_status', 'Unknown')}",
-            f"  • Active Blockers: {summary.get('blockers_count', 0)}",
-            f"  • Actions Executed: {summary.get('total_actions', 0)}",
-            f"  • Success Rate: {summary.get('success_rate', 0)}%",
-            f"  • Approval Rate: {summary.get('approval_rate', 0)}%",
-            "",
-        ]
-        
-        # Action breakdown
-        breakdown = report.get('action_breakdown', {})
-        if breakdown:
-            lines.append("📋 ACTIONS BY TYPE")
-            for action_type, count in breakdown.items():
-                lines.append(f"  • {action_type}: {count}")
-            lines.append("")
-        
-        lines.extend([
-            "═" * 40,
-            "Generated by The Real PM Agent"
-        ])
-        
-        return '\n'.join(lines)
+        """Return the pre-generated text from the LLM."""
+        return report.get('report_text', "Report generation failed.")
 
 
         # Check for stale tasks
