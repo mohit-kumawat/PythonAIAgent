@@ -293,25 +293,27 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         Messages: {mentions_text}
         
         USER DIRECTORY:
-        - {os.environ.get("SLACK_USER_ID")}: Mohit (Project Manager)
+        - {os.environ.get("SLACK_USER_ID")}: Mohit (Project Manager) - AUTHORIZED for all actions
         - {bot_user_id}: You (The Real PM)
         
         CRITICAL RULES:
-        1. **NEVER ASK QUESTIONS TO THE USER WHO JUST ASKED YOU A QUESTION**: If Mohit asks you something, DO NOT generate a send_message action asking Mohit for clarification. Instead, provide the best answer you can based on available context, or state that you need more information in your reply.
-        2. **DO NOT CREATE CIRCULAR CONVERSATIONS**: Never send a message back to the same user/channel that triggered this analysis asking them to clarify their own question.
-        3. **Think First**: If you need to "check with" someone OTHER than the person who asked, you MUST generate a `send_message` action to that other person.
-        4. **Context First**: Always check the provided Context text before asking users for info.
-        5. **No Hallucinations**: Do not make up User IDs. Use <@USER_ID> only if known or parsed from the message.
-        6. **Reply in Thread**: When responding to a message, always use the same thread_ts to keep conversations organized.
+        1. **ALWAYS INCLUDE trigger_user_id**: For EVERY action, you MUST set trigger_user_id to the user ID who sent the triggering message. This is REQUIRED for authorization. Extract the 'user' field from the message.
+        2. **NEVER ASK QUESTIONS TO THE USER WHO JUST ASKED YOU A QUESTION**: If Mohit asks you something, DO NOT generate a send_message action asking Mohit for clarification. Instead, provide the best answer you can based on available context, or state that you need more information in your reply.
+        3. **DO NOT CREATE CIRCULAR CONVERSATIONS**: Never send a message back to the same user/channel that triggered this analysis asking them to clarify their own question.
+        4. **Think First**: If you need to "check with" someone OTHER than the person who asked, you MUST generate a `send_message` action to that other person.
+        5. **Context First**: Always check the provided Context text before asking users for info.
+        6. **No Hallucinations**: Do not make up User IDs. Use <@USER_ID> only if known or parsed from the message.
+        7. **Reply in Thread**: When responding to a message, always use the same thread_ts to keep conversations organized.
         
         TOOLS AVAILABLE:
         - `send_message`: Send immediate text to a channel or user (use 'draft_reply' for direct responses to the triggering user).
         - `draft_reply`: Generate a direct reply to the user who asked the question (preferred for answering questions).
         - `schedule_reminder`: Schedule a message for the future.
         - `update_context_task`: Update the project status/tasks.
-        - `post_slack_poll`: Create a voting poll.
+        - `post_slack_poll`: Create a voting poll (MUST include trigger_user_id for authorization).
         - `add_calendar_event`: Schedule a meeting.
         
+        IMPORTANT: Every action MUST have trigger_user_id set to the user who sent the message (extract from message 'user' field).
         """
         
         client = manager.get_client()
@@ -413,6 +415,15 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
                 
                 # Get the triggering user ID (from LLM or data)
                 trigger_user = action.get('trigger_user_id') or action.get('data', {}).get('trigger_user_id')
+                
+                # FALLBACK: If AI didn't include trigger_user_id, extract from triggering messages
+                if not trigger_user and filtered_mentions:
+                    # Use the first triggering user (most recent mention)
+                    trigger_user = filtered_mentions[0].get('user')
+                    if trigger_user:
+                        action['trigger_user_id'] = trigger_user
+                        log(f"🔧 Auto-extracted trigger_user_id: {trigger_user}")
+                
                 authorized_user = os.environ.get('SLACK_USER_ID')
                 is_authorized = (trigger_user == authorized_user) if authorized_user else False
 
