@@ -226,99 +226,95 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         
         # Define JSON Schema for structured output (RELIABILITY UPGRADE)
         action_schema = {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "action_type": {
-                        "type": "STRING",
-                        "enum": ["schedule_reminder", "send_message", "update_context_task", "draft_reply", 
-                                "send_email_summary", "post_slack_poll", "add_calendar_event"]
-                    },
-                    "reasoning": {"type": "STRING"},
-                    "confidence": {"type": "NUMBER"},
-                    "severity": {"type": "STRING", "enum": ["low", "medium", "high"]},
-                    "trigger_user_id": {"type": "STRING"},
-                    "data": {
+            "type": "OBJECT",
+            "properties": {
+                "thought_process": {
+                    "type": "STRING", 
+                    "description": "Analysis of the request, context check, and decision making process."
+                },
+                "actions": {
+                    "type": "ARRAY",
+                    "items": {
                         "type": "OBJECT",
                         "properties": {
-                            "target_channel_id": {"type": "STRING"},
-                            "target_user_ids": {"type": "ARRAY", "items": {"type": "STRING"}},
-                            "message_text": {"type": "STRING"},
-                            "thread_ts": {"type": "STRING"},
-                            "time_iso": {"type": "STRING"},
-                            "epic_title": {"type": "STRING"},
-                            "new_status": {"type": "STRING"},
-                            "new_owner": {"type": "STRING"},
-                            "new_markdown_content": {"type": "STRING"}
-                        }
+                            "action_type": {
+                                "type": "STRING",
+                                "enum": ["schedule_reminder", "send_message", "update_context_task", "draft_reply", 
+                                        "send_email_summary", "post_slack_poll", "add_calendar_event"]
+                            },
+                            "reasoning": {"type": "STRING"},
+                            "confidence": {"type": "NUMBER"},
+                            "severity": {"type": "STRING", "enum": ["low", "medium", "high"]},
+                            "trigger_user_id": {"type": "STRING"},
+                            "data": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "target_channel_id": {"type": "STRING"},
+                                    "target_user_ids": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "message_text": {"type": "STRING"},
+                                    "thread_ts": {"type": "STRING"},
+                                    "time_iso": {"type": "STRING"},
+                                    "epic_title": {"type": "STRING"},
+                                    "new_status": {"type": "STRING"},
+                                    "new_owner": {"type": "STRING"},
+                                    "new_markdown_content": {"type": "STRING"},
+                                    "question": {"type": "STRING"},
+                                    "options": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "summary": {"type": "STRING"},
+                                    "start_time": {"type": "STRING"},
+                                    "end_time": {"type": "STRING"},
+                                    "description": {"type": "STRING"},
+                                    "attendees": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "recipient": {"type": "STRING"},
+                                    "period": {"type": "STRING"}
+                                }
+                            }
+                        },
+                        "required": ["action_type", "reasoning", "data"]
                     }
-                },
-                "required": ["action_type", "reasoning", "data"]
-            }
+                }
+            },
+            "required": ["thought_process", "actions"]
         }
         
-        prompt = f"""You are The Real PM agent (Daemon Mode). Analyze these Slack messages.
+        prompt = f"""You are The Real PM agent (Daemon Mode).
         
         Current Time: {current_time}
         Context: {context_text}
+        
+        TASK:
+        1. **ANALYZE**: Read the messages and the full 'thread_context'.
+        2. **THINK**: Use the 'thought_process' field to write out your plan.
+           - User Intent: What do they want?
+           - Context Check: Do I already know the answer in 'Context'?
+           - Tool Selection: What tool do I need? (e.g., send_message to ask someone, schedule_reminder to follow up).
+        3. **ACT**: Generate the 'actions' array.
+        
         Messages: {mentions_text}
         
-        IMPORTANT: Each message now includes a 'thread_context' field with ALL messages in that thread.
-        READ THE FULL THREAD CONTEXT before deciding to respond!
+        USER DIRECTORY:
+        - {os.environ.get("SLACK_USER_ID")}: Mohit (Project Manager)
+        - {bot_user_id}: You (The Real PM)
         
-        USER DIRECTORY (Map these IDs to names):
-        - {os.environ.get("SLACK_USER_ID")}: Mohit (Project Manager/User)
-        - {bot_user_id}: You (The Real PM Agent) - NEVER tag yourself in messages.
-        - U0A1J73B8JH: Pravin
-        - U07NJKB5HA7: Umang
-        - U07FDMFFM5F: Mohit
+        CRITICAL RULES:
+        1. **Think First**: If you need to "check with" someone, you MUST generate a `send_message` action to them.
+        2. **Context First**: Always check the provided Context text before asking users for info.
+        3. **No Hallucinations**: Do not make up User IDs. Use <@USER_ID> only if known or parsed from the message.
         
-        CRITICAL RULES - PREVENT INFINITE LOOPS:
-        1. NEVER respond to messages sent by {bot_user_id} (yourself/The Real PM Agent)
-        2. NEVER send messages to channel {bot_user_id} (that's your own DM)
-        3. If you see a message from user_id {bot_user_id}, IGNORE IT COMPLETELY
+        TOOLS AVAILABLE:
+        - `send_message`: Send immediate text to a channel or user.
+        - `schedule_reminder`: Schedule a message for the future.
+        - `update_context_task`: Update the project status/tasks.
+        - `post_slack_poll`: Create a voting poll.
+        - `add_calendar_event`: Schedule a meeting.
         
-        THREAD AWARENESS RULES (CRITICAL):
-        1. READ THE FULL 'thread_context' for each message to see the entire conversation
-        2. If someone says "Mark it resolved", "It's done", "Fixed", "Resolved", etc., DO NOT reply
-        3. If you already replied in the thread AND no one asked a NEW question, DO NOT reply again
-        4. Only reply if:
-           - Someone directly asks you a NEW question
-           - Someone explicitly mentions you with a new request
-           - The conversation has moved to a different topic
-           - There's a NEW blocker or issue that needs attention
-        5. NEVER repeat the same answer multiple times in one thread
-        6. If the last message in thread_context is a resolution/completion message, DO NOT reply
-        
-        SMART CONTEXT UPDATES (NEW):
-        If the user confirms a task is done (e.g., "I fixed the login bug", "Deployed to production", "Bug resolved"),
-        AUTOMATICALLY generate an 'update_context_task' action to move that item to 'Completed' in the active tasks list.
-        Do not wait for an explicit 'update context' command.
-        
-        CRITICAL INSTRUCTION: Include a 'confidence' score (0-1) and 'severity' (low, medium, high) for each action.
-        Also include 'trigger_user_id' in the JSON (the ID of the user who caused this action).
-        
-        If you are >0.8 confident and severity is not 'critical', the action will be auto-executed.
-        
-        WRITING & FORMATTING RULES:
-        1. Speak naturally in first-person ("I", "We"). DO NOT refer to yourself as "The Real PM" or tag yourself.
-        2. When mentioning users, ALWAYS use the <@USER_ID> format. if you only have a name, look it up in context or output plain text name.
-        3. Do NOT use raw User IDs (e.g., U12345) in text without <@...> wrappers.
-        4. For Reminders: Simplify the text. Instead of "Remind Mohit to check X", just use "Check X".
-        
-        IDENTITY RULES (CRITICAL):
-        You are an AI Project Manager, NOT a developer.
-        - NEVER claim you are "working on" a coding task, fixing a bug, or testing a feature.
-        - If asked "What's the update", report on what the TEAM is doing based on the Context.
-        - Example: Instead of "I am fixing the login", say "The team is working on the login fix" or "Mohit is working on the login fix".
         """
         
         client = manager.get_client()
         
-        # Use native JSON schema enforcement (NO MORE REGEX!)
+        # Use native JSON schema enforcement
         response = client.models.generate_content(
-            model="gemini-2.0-flash",  # Schema requires 2.0+ models
+            model="gemini-2.0-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -326,8 +322,10 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             )
         )
         
-        # Direct JSON parsing - no regex needed!
-        new_actions = parse_json_response(response.text)
+        # Parse Object Response
+        response_data = json.loads(response.text)
+        log(f"🧠 AGENT THOUGHTS: {response_data.get('thought_process', 'No thoughts provided')}")
+        new_actions = response_data.get('actions', [])
         
         if new_actions:
             # 3. Append to Pending Queue
