@@ -4,6 +4,7 @@ Detects stale tasks, blockers, and generates automatic suggestions.
 """
 
 import re
+import os
 import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
@@ -222,6 +223,12 @@ class ProactiveEngine:
         DIRECTIVE:
         {custom_directive}
         
+        USER DIRECTORY (Use these names):
+        - {os.environ.get("SLACK_USER_ID", "U07FDMFFM5F")}: Mohit
+        - U0A1J73B8JH: Pravin
+        - U07NJKB5HA7: Umang
+        - U08T2AJQ1NF: Badal
+        
         INSTRUCTIONS:
         1. Digest the context above (Tasks, Epics, Blockers, Health).
         2. Write a professional, concise status update message.
@@ -235,6 +242,10 @@ class ProactiveEngine:
            - Use single asterisks for *bold text* (e.g., *Heading*). Do NOT use double asterisks (**).
            - Use bullet points (•) for lists.
            - Keep it clean and easy to read on mobile.
+           - REPLACE ALL User IDs with Names or Mentions:
+             - If you know the name (from directory above), use the Name (e.g., "Pravin").
+             - If you need to tag them, use <@USER_ID>.
+             - NEVER output a raw ID like "U12345" alone.
         """
         
         response = client.models.generate_content(
