@@ -311,7 +311,19 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         - `draft_reply`: Generate a direct reply to the user who asked the question (preferred for answering questions).
         - `schedule_reminder`: Schedule a message for the future.
         - `update_context_task`: Update the project status/tasks.
-        - `post_slack_poll`: Create a voting poll (MUST include trigger_user_id for authorization). DO NOT send a separate confirmation message - the poll itself is the confirmation. Use confidence >= 0.9 for straightforward poll requests.
+        - `post_slack_poll`: Create a voting poll. DO NOT send a separate confirmation message - the poll itself is the confirmation. Use confidence >= 0.9 for straightforward poll requests.
+          Example poll data:
+          {{
+            "action_type": "post_slack_poll",
+            "trigger_user_id": "U07FDMFFM5F",
+            "confidence": 0.95,
+            "reasoning": "Creating poll as requested",
+            "data": {{
+              "target_channel_id": "C08JF2UFCR1",
+              "question": "Who is ready for writing blog today?",
+              "options": ["Yes", "No", "Maybe"]
+            }}
+          }}
         - `add_calendar_event`: Schedule a meeting.
         
         IMPORTANT: Every action MUST have trigger_user_id set to the user who sent the message (extract from message 'user' field).
@@ -754,10 +766,15 @@ def execute_approved_actions_job():
                     )
                 
                 elif atype == 'post_slack_poll':
+                    # Get channel ID (support both field names)
+                    poll_channel = data.get('channel_id') or data.get('target_channel_id')
+                    if not poll_channel:
+                        raise KeyError("Missing channel_id or target_channel_id for poll")
+                    
                     result = post_slack_poll(
-                        channel_id=data['channel_id'],
+                        channel_id=poll_channel,
                         question=data['question'],
-                        options=data['options']
+                        options=data.get('options', [])
                     )
                 
                 elif atype == 'add_calendar_event':
