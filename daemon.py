@@ -531,6 +531,7 @@ def run_daily_status_job(type="morning"):
     log(f"Generating daily {type} report...")
     try:
         context_text = read_context()
+        engine = ProactiveEngine(memory)
         
         # Custom prompt based on time of day
         if type == "morning":
