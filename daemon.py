@@ -311,10 +311,15 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         - `draft_reply`: Generate a direct reply to the user who asked the question (preferred for answering questions).
         - `schedule_reminder`: Schedule a message for the future.
         - `update_context_task`: Update the project status/tasks.
-        - `post_slack_poll`: Create a voting poll (MUST include trigger_user_id for authorization). DO NOT send a separate confirmation message - the poll itself is the confirmation.
+        - `post_slack_poll`: Create a voting poll (MUST include trigger_user_id for authorization). DO NOT send a separate confirmation message - the poll itself is the confirmation. Use confidence >= 0.9 for straightforward poll requests.
         - `add_calendar_event`: Schedule a meeting.
         
         IMPORTANT: Every action MUST have trigger_user_id set to the user who sent the message (extract from message 'user' field).
+        
+        CONFIDENCE GUIDELINES:
+        - Simple, clear requests (polls, reminders): confidence >= 0.9
+        - Moderate complexity (context updates): confidence >= 0.8
+        - Complex or ambiguous: confidence < 0.8
         
         NOTE: When creating polls, reminders, or calendar events, DO NOT generate a separate send_message action to confirm. The action itself is the confirmation.
         """
@@ -430,6 +435,9 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
                 
                 authorized_user = os.environ.get('SLACK_USER_ID')
                 is_authorized = (trigger_user == authorized_user) if authorized_user else False
+                
+                # DEBUG LOGGING
+                log(f"📋 Action {action['id']}: type={atype}, confidence={confidence}, trigger_user={trigger_user}, authorized={is_authorized}")
 
                 if atype in ['send_message', 'draft_reply']:
                      # Direct replies are safe if confident
@@ -438,15 +446,27 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
                      else:
                          action['status'] = 'PENDING'
                 
-                elif atype in ['schedule_reminder', 'update_context_task', 'add_calendar_event', 'post_slack_poll', 'send_email_summary']:
+                elif atype in ['schedule_reminder', 'update_context_task', 'add_calendar_event', 'send_email_summary']:
                      # Critical tasks: STRICTLY authorized user only
                      if is_authorized and confidence > 0.85:
                          action['status'] = 'APPROVED'
                          log(f"Auto-approving authorized task {action['id']} from {trigger_user}")
+
                      else:
                          action['status'] = 'PENDING'
                          if not is_authorized:
                              log(f"Held unauthorized task {action['id']} from {trigger_user} (Auth: {authorized_user})")
+                
+                elif atype == 'post_slack_poll':
+                     # Polls are low-risk, lower threshold
+                     if is_authorized and confidence > 0.75:
+                         action['status'] = 'APPROVED'
+                         log(f"Auto-approving poll {action['id']} from {trigger_user}")
+                     else:
+                         action['status'] = 'PENDING'
+                         if not is_authorized:
+                             log(f"Held unauthorized poll {action['id']} from {trigger_user} (Auth: {authorized_user})")
+
                 
                 else:
                     # Default for unknown types
