@@ -297,12 +297,16 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         - {bot_user_id}: You (The Real PM)
         
         CRITICAL RULES:
-        1. **Think First**: If you need to "check with" someone, you MUST generate a `send_message` action to them.
-        2. **Context First**: Always check the provided Context text before asking users for info.
-        3. **No Hallucinations**: Do not make up User IDs. Use <@USER_ID> only if known or parsed from the message.
+        1. **NEVER ASK QUESTIONS TO THE USER WHO JUST ASKED YOU A QUESTION**: If Mohit asks you something, DO NOT generate a send_message action asking Mohit for clarification. Instead, provide the best answer you can based on available context, or state that you need more information in your reply.
+        2. **DO NOT CREATE CIRCULAR CONVERSATIONS**: Never send a message back to the same user/channel that triggered this analysis asking them to clarify their own question.
+        3. **Think First**: If you need to "check with" someone OTHER than the person who asked, you MUST generate a `send_message` action to that other person.
+        4. **Context First**: Always check the provided Context text before asking users for info.
+        5. **No Hallucinations**: Do not make up User IDs. Use <@USER_ID> only if known or parsed from the message.
+        6. **Reply in Thread**: When responding to a message, always use the same thread_ts to keep conversations organized.
         
         TOOLS AVAILABLE:
-        - `send_message`: Send immediate text to a channel or user.
+        - `send_message`: Send immediate text to a channel or user (use 'draft_reply' for direct responses to the triggering user).
+        - `draft_reply`: Generate a direct reply to the user who asked the question (preferred for answering questions).
         - `schedule_reminder`: Schedule a message for the future.
         - `update_context_task`: Update the project status/tasks.
         - `post_slack_poll`: Create a voting poll.
@@ -326,6 +330,70 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         response_data = json.loads(response.text)
         log(f"🧠 AGENT THOUGHTS: {response_data.get('thought_process', 'No thoughts provided')}")
         new_actions = response_data.get('actions', [])
+        
+        # CRITICAL VALIDATION: Filter out self-questioning actions
+        # Identify the triggering user/channel from the messages
+        triggering_users = set()
+        triggering_channels = set()
+        for m in filtered_mentions:
+            if m.get('user'):
+                triggering_users.add(m.get('user'))
+            if m.get('channel'):
+                triggering_channels.add(m.get('channel'))
+        
+        validated_actions = []
+        for action in new_actions:
+            atype = action.get('action_type')
+            data = action.get('data', {})
+            
+            # Check if this is a message action
+            if atype in ['send_message', 'draft_reply']:
+                target_channel = data.get('target_channel_id') or data.get('channel_id') or data.get('channel')
+                message_text = data.get('message_text', '')
+                
+                # RULE 1: Don't send questions back to the triggering user/channel
+                is_question = '?' in message_text
+                targets_triggering_user = target_channel in triggering_users
+                targets_triggering_channel = target_channel in triggering_channels
+                
+                if is_question and (targets_triggering_user or targets_triggering_channel):
+                    log(f"⚠️ BLOCKED self-questioning action: '{message_text[:50]}...' to {target_channel}")
+                    log(f"   Triggering users: {triggering_users}, channels: {triggering_channels}")
+                    continue  # Skip this action
+                
+                # RULE 2: Don't ask Mohit to clarify his own questions
+                mohit_id = os.environ.get('SLACK_USER_ID')
+                if mohit_id and target_channel == mohit_id and is_question:
+                    # Check if Mohit was the one who asked
+                    if mohit_id in triggering_users:
+                        log(f"⚠️ BLOCKED asking Mohit to clarify his own question: '{message_text[:50]}...'")
+                        continue  # Skip this action
+                
+                # RULE 3: Don't send messages that mention/tag the bot itself
+                bot_id = os.environ.get('SLACK_BOT_USER_ID')
+                if bot_id:
+                    # Check if message tags the bot
+                    if f'<@{bot_id}>' in message_text or '@The Real PM' in message_text:
+                        log(f"⚠️ BLOCKED message that tags the bot itself: '{message_text[:50]}...'")
+                        continue  # Skip this action
+                
+                # RULE 4: Ensure thread_ts is preserved for threaded conversations
+                # If the original message had a thread_ts, the reply MUST include it
+                if not data.get('thread_ts'):
+                    # Try to infer from the triggering message
+                    for m in filtered_mentions:
+                        if m.get('channel') == target_channel:
+                            inferred_thread_ts = m.get('thread_ts') or m.get('ts')
+                            if inferred_thread_ts:
+                                data['thread_ts'] = inferred_thread_ts
+                                log(f"📎 Auto-added thread_ts: {inferred_thread_ts}")
+                                break
+            
+            # Action passed validation
+            validated_actions.append(action)
+        
+        new_actions = validated_actions
+
         
         if new_actions:
             # 3. Append to Pending Queue
