@@ -310,6 +310,7 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         8. **Status Updates**: If a user provides a status update (e.g., "I finished X", "X is done"), you MUST generate TWO actions:
            - `update_context_task`: To reflect the change in project status.
            - `draft_reply`: To confirm to the user that you updated the context (e.g., "Thanks, I've marked X as done.").
+        9. **Export Context**: If a user asks to "export context" or "see the full context", you MUST generate a `send_message` action containing the COMPLETE text of the Project Context inside a markdown code block.
         
         TOOLS AVAILABLE:
         - `send_message`: Send immediate text to a channel or user.
