@@ -321,7 +321,7 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
             "data": {{
               "target_channel_id": "C08JF2UFCR1",
               "question": "Who is ready for writing blog today?",
-              "options": ["Yes", "No", "Maybe"]
+              "options": ["Option_1", "Option_2", "Option_3"]
             }}
           }}
         - `add_calendar_event`: Schedule a meeting.
