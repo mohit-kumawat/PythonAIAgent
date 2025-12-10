@@ -2,12 +2,43 @@ import os
 import json
 from google.genai import types
 
+import shutil
+
+def get_context_path():
+    """
+    Get the path to context.md.
+    If PERSISTENT_DATA_PATH is set:
+      - Use that path.
+      - If file doesn't exist there, copy from local defaults.
+    """
+    persistent_dir = os.environ.get('PERSISTENT_DATA_PATH')
+    default_path = "context.md"
+    
+    if persistent_dir:
+        os.makedirs(persistent_dir, exist_ok=True)
+        persistent_path = os.path.join(persistent_dir, "context.md")
+        
+        if not os.path.exists(persistent_path):
+            if os.path.exists(default_path):
+                try:
+                    shutil.copy2(default_path, persistent_path)
+                    print(f"Initialized persistent context at {persistent_path}")
+                except Exception as e:
+                    print(f"Error initializing persistent context: {e}")
+                    return default_path
+            else:
+                # Neither exists
+                return default_path
+        return persistent_path
+    
+    return default_path
+
 def read_context():
     """
     Reads the context.md file.
     Returns the content as a string.
     """
-    file_path = "context.md"
+    file_path = get_context_path()
     if not os.path.exists(file_path):
         return ""
     
@@ -60,7 +91,7 @@ def update_section(section_title, new_content, append=False):
     """
     import re
     
-    file_path = "context.md"
+    file_path = get_context_path()
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"{file_path} not found.")
     

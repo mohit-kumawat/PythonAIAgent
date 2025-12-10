@@ -20,7 +20,16 @@ class MemoryManager:
     - knowledge: Extracted facts, user preferences, patterns
     """
     
-    def __init__(self, db_path: str = "memory/pm_agent.db"):
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            # Check for persistent storage path
+            data_dir = os.environ.get('PERSISTENT_DATA_PATH')
+            if data_dir:
+                os.makedirs(data_dir, exist_ok=True)
+                db_path = os.path.join(data_dir, "pm_agent.db")
+            else:
+                db_path = "memory/pm_agent.db"
+        
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._init_db()
@@ -500,7 +509,7 @@ class MemoryManager:
 # Singleton instance for easy import
 _memory_instance = None
 
-def get_memory_manager(db_path: str = "memory/pm_agent.db") -> MemoryManager:
+def get_memory_manager(db_path: str = None) -> MemoryManager:
     """Get or create the singleton MemoryManager instance."""
     global _memory_instance
     if _memory_instance is None:
