@@ -35,6 +35,9 @@ load_dotenv()
 # Initialize memory manager
 memory = get_memory_manager()
 
+# Global variable to store monitored channels
+monitored_channels = []
+
 def log(message: str):
     """Writes to the shared log file and stdout."""
     try:
@@ -641,13 +644,17 @@ def run_weekly_report_job():
     except Exception as e:
         log(f"Weekly report generation failed: {e}")
 
-def run_daily_status_job(type="morning"):
+def run_daily_status_job(type="morning", channel_id=None):
     """
     Generates a daily status update (Morning or Evening).
     Morning (10 AM IST): Focus on plan for the day, blockers, and immediate actions.
     Evening (6 PM IST): Focus on progress made, what's pending, and plan for tomorrow.
     
     Uses persistence to prevent duplicate sends on restart.
+    
+    Args:
+        type: 'morning' or 'evening'
+        channel_id: Slack channel ID to send to (uses first monitored channel if not provided)
     """
     # Check if we already sent this report today
     ist = pytz.timezone('Asia/Kolkata')
@@ -674,6 +681,16 @@ def run_daily_status_job(type="morning"):
         report = engine.generate_status_report(context_text, period="daily", custom_directive=prompt_directive)
         report_text = engine.generate_report_text(report)
         
+        # Determine target channel
+        if not channel_id:
+            # Fallback to env var or error
+            channels = os.environ.get('SLACK_CHANNELS', '').split()
+            if channels:
+                channel_id = channels[0]
+            else:
+                log(f"ERROR: No channel_id provided and SLACK_CHANNELS env var is empty!")
+                return
+        
         # Add as auto-approved action if confident, or pending if complex
         action = {
             "id": f"daily-{type}-{int(time.time())}",
@@ -685,7 +702,7 @@ def run_daily_status_job(type="morning"):
             "severity": "low",
             "data": {
                 "message_text": report_text,
-                "target_channel_id": os.environ.get('SLACK_CHANNELS', '').split()[0] # Send to first channel (Main)
+                "target_channel_id": channel_id
             }
         }
         
@@ -695,7 +712,7 @@ def run_daily_status_job(type="morning"):
         
         # Mark as sent in memory
         memory.mark_report_sent(report_key)
-        log(f"Daily {type} report queued and marked as sent for {today_date}.")
+        log(f"Daily {type} report queued for channel {channel_id} and marked as sent for {today_date}.")
 
         
     except Exception as e:
@@ -706,6 +723,8 @@ def check_and_send_missed_reports():
     Check if today's reports were missed and send them now.
     This runs on startup to catch up if server was down during scheduled time.
     """
+    global monitored_channels
+    
     ist = pytz.timezone('Asia/Kolkata')
     now_ist = datetime.now(ist)
     today_date = now_ist.strftime('%Y-%m-%d')
@@ -713,12 +732,18 @@ def check_and_send_missed_reports():
     
     log(f"Checking for missed reports... Current time: {now_ist.strftime('%H:%M IST')}")
     
+    # Get the channel to send to
+    channel_id = monitored_channels[0] if monitored_channels else None
+    if not channel_id:
+        log("ERROR: No monitored channels available for daily reports!")
+        return
+    
     # Check morning report (should have been sent by 10 AM)
     if current_hour >= 10:
         morning_key = f"daily_morning_{today_date}"
         if not memory.has_sent_report(morning_key):
             log(f"⚠️ Morning report for {today_date} was missed! Sending now...")
-            run_daily_status_job(type="morning")
+            run_daily_status_job(type="morning", channel_id=channel_id)
         else:
             log(f"✅ Morning report for {today_date} already sent.")
     
@@ -727,7 +752,7 @@ def check_and_send_missed_reports():
         evening_key = f"daily_evening_{today_date}"
         if not memory.has_sent_report(evening_key):
             log(f"⚠️ Evening report for {today_date} was missed! Sending now...")
-            run_daily_status_job(type="evening")
+            run_daily_status_job(type="evening", channel_id=channel_id)
         else:
             log(f"✅ Evening report for {today_date} already sent.")
     
@@ -906,6 +931,9 @@ def execute_approved_actions_job():
 
 def start_daemon(channel_ids: list):
     """Start the daemon scheduler loop (blocking)"""
+    global monitored_channels
+    monitored_channels = channel_ids
+    
     try:
         manager = ClientManager()
     except Exception as e:
@@ -915,6 +943,9 @@ def start_daemon(channel_ids: list):
     log("Daemon started. Monitoring channels: " + str(channel_ids))
     log(f"Memory database: {memory.db_path}")
     log(f"Current Server Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    
+    # Get the main channel for reports
+    main_channel = channel_ids[0] if channel_ids else None
     
     # Schedule jobs
     # USER REQUEST: Run frequently for responsiveness (every 30 seconds)
@@ -927,8 +958,8 @@ def start_daemon(channel_ids: list):
     
     # Daily Reports (10 AM IST = 04:30 UTC, 6 PM IST = 12:30 UTC)
     # Render servers run on UTC, so we need to convert IST to UTC
-    schedule.every().day.at("04:30").do(run_daily_status_job, type="morning")  # 10:00 AM IST
-    schedule.every().day.at("12:30").do(run_daily_status_job, type="evening")  # 6:00 PM IST
+    schedule.every().day.at("04:30").do(run_daily_status_job, type="morning", channel_id=main_channel)  # 10:00 AM IST
+    schedule.every().day.at("12:30").do(run_daily_status_job, type="evening", channel_id=main_channel)  # 6:00 PM IST
     
     schedule.every(1).hour.do(cleanup_queue_job)
     
