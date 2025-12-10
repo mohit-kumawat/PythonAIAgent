@@ -644,10 +644,23 @@ def run_weekly_report_job():
 def run_daily_status_job(type="morning"):
     """
     Generates a daily status update (Morning or Evening).
-    Morning (10 AM): Focus on plan for the day, blockers, and immediate actions.
-    Evening (6 PM): Focus on progress made, what's pending, and plan for tomorrow.
+    Morning (10 AM IST): Focus on plan for the day, blockers, and immediate actions.
+    Evening (6 PM IST): Focus on progress made, what's pending, and plan for tomorrow.
+    
+    Uses persistence to prevent duplicate sends on restart.
     """
-    log(f"Generating daily {type} report...")
+    # Check if we already sent this report today
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
+    today_date = now_ist.strftime('%Y-%m-%d')
+    report_key = f"daily_{type}_{today_date}"
+    
+    # Check memory to see if we already sent this report
+    if memory.has_sent_report(report_key):
+        log(f"Daily {type} report already sent today ({today_date}), skipping.")
+        return
+    
+    log(f"Generating daily {type} report for {today_date}...")
     try:
         context_text = read_context()
         engine = ProactiveEngine(memory)
@@ -679,7 +692,11 @@ def run_daily_status_job(type="morning"):
         current_queue = get_pending_actions()
         current_queue.append(action)
         save_pending_actions(current_queue)
-        log(f"Daily {type} report queued.")
+        
+        # Mark as sent in memory
+        memory.mark_report_sent(report_key)
+        log(f"Daily {type} report queued and marked as sent for {today_date}.")
+
         
     except Exception as e:
         log(f"Daily {type} report generation failed: {e}")
@@ -873,15 +890,25 @@ def start_daemon(channel_ids: list):
     schedule.every(1).hour.do(run_proactive_check_job, channel_ids=channel_ids)
     schedule.every().friday.at("17:00").do(run_weekly_report_job)
     
-    # Daily Reports (10 AM & 6 PM)
-    schedule.every().day.at("10:00").do(run_daily_status_job, type="morning")
-    schedule.every().day.at("18:00").do(run_daily_status_job, type="evening")
+    # Daily Reports (10 AM IST = 04:30 UTC, 6 PM IST = 12:30 UTC)
+    # Render servers run on UTC, so we need to convert IST to UTC
+    schedule.every().day.at("04:30").do(run_daily_status_job, type="morning")  # 10:00 AM IST
+    schedule.every().day.at("12:30").do(run_daily_status_job, type="evening")  # 6:00 PM IST
     
     schedule.every(1).hour.do(cleanup_queue_job)
     
     # Run once immediately
     check_mentions_job(manager, channel_ids)
     cleanup_queue_job()
+    
+    log("📅 Scheduled jobs:")
+    log("   - Check mentions: Every 30 seconds")
+    log("   - Execute actions: Every 10 seconds")
+    log("   - Proactive check: Every 1 hour")
+    log("   - Morning report: 04:30 UTC (10:00 AM IST)")
+    log("   - Evening report: 12:30 UTC (6:00 PM IST)")
+    log("   - Weekly report: Friday 17:00 UTC")
+    log("   - Cleanup: Every 1 hour")
     
     while True:
         schedule.run_pending()

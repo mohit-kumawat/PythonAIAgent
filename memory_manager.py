@@ -91,6 +91,14 @@ class MemoryManager:
             )
         ''')
         
+        # Sent reports table - track daily/weekly reports to prevent duplicates
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sent_reports (
+                report_key TEXT PRIMARY KEY,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -450,6 +458,43 @@ class MemoryManager:
             "successful_actions": successful_actions,
             "approval_rate": approval["rate"]
         }
+    
+    def has_sent_report(self, report_key: str) -> bool:
+        """
+        Check if a report has already been sent today.
+        
+        Args:
+            report_key: Unique key for the report (e.g., 'daily_morning_2025-12-10')
+            
+        Returns:
+            True if report was already sent, False otherwise
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT 1 FROM sent_reports WHERE report_key = ?', (report_key,))
+        result = cursor.fetchone()
+        conn.close()
+        return result is not None
+    
+    def mark_report_sent(self, report_key: str):
+        """
+        Mark a report as sent.
+        
+        Args:
+            report_key: Unique key for the report (e.g., 'daily_morning_2025-12-10')
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                'INSERT OR REPLACE INTO sent_reports (report_key) VALUES (?)',
+                (report_key,)
+            )
+            conn.commit()
+        except Exception as e:
+            print(f"Error marking report sent: {e}")
+        finally:
+            conn.close()
 
 
 # Singleton instance for easy import
