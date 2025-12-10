@@ -264,10 +264,26 @@ class ProactiveEngine:
         """Return the pre-generated text from the LLM."""
         return report.get('report_text', "Report generation failed.")
 
-
+    def get_proactive_suggestions(self, context_md: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Gather all proactive suggestions (stale tasks, blockers).
+        
+        Args:
+            context_md: Project context content
+            messages: Recent Slack messages
+            
+        Returns:
+            List of proactive actions
+        """
+        suggestions = []
+        
         # Check for stale tasks
         stale_tasks = self.check_stale_tasks(context_md)
         for task in stale_tasks:
+            # Check if recently suggested to avoid spam
+            if self._was_recently_suggested(task["content"]):
+                continue
+                
             suggestions.append({
                 "id": f"proactive-{task['id']}",
                 "action_type": "proactive_followup",
@@ -281,13 +297,18 @@ class ProactiveEngine:
                     "suggested_action": task["suggested_action"]
                 },
                 "is_proactive": True,
-                "priority": task.get("priority", "medium")
+                "priority": task.get("priority", "medium"),
+                "confidence": 0.85
             })
         
         # Check for blockers in messages
         if messages:
             blockers = self.detect_blockers(messages)
             for blocker in blockers:
+                # Check if recently suggested to avoid spam
+                if self._was_recently_suggested(blocker["message_text"]):
+                    continue
+                    
                 suggestions.append({
                     "id": f"proactive-{blocker['id']}",
                     "action_type": "proactive_blocker_alert",
@@ -300,7 +321,8 @@ class ProactiveEngine:
                         "pattern": blocker["pattern_matched"]
                     },
                     "is_proactive": True,
-                    "priority": "high"
+                    "priority": "high",
+                    "confidence": 0.9
                 })
         
         # Store insights for learning
@@ -324,14 +346,14 @@ class ProactiveEngine:
         """
         now = datetime.now()
         
-        # Check if it's Friday
-        if now.weekday() != 4:  # Friday = 4
+        # Check if Friday (4)
+        if now.weekday() != 4:
             return False
-        
-        # Check if it's after 4 PM
+            
+        # Check time (after 4 PM)
         if now.hour < 16:
             return False
-        
+            
         # Check if report was already sent today
         recent_actions = self.memory.get_action_history(
             limit=10, 

@@ -307,13 +307,15 @@ def check_mentions_job(manager: ClientManager, channel_ids: list):
         5. **Context First**: Always check the provided Context text before asking users for info.
         6. **No Hallucinations**: Do not make up User IDs. Use <@USER_ID> only if known or parsed from the message.
         7. **Reply in Thread**: When responding to a message, always use the same thread_ts to keep conversations organized.
-        
+        8. **Status Updates**: If a user provides a status update (e.g., "I finished X", "X is done"), you MUST generate TWO actions:
+           - `update_context_task`: To reflect the change in project status.
+           - `draft_reply`: To confirm to the user that you updated the context (e.g., "Thanks, I've marked X as done.").
         
         TOOLS AVAILABLE:
-        - `send_message`: Send immediate text to a channel or user (use 'draft_reply' for direct responses to the triggering user).
-        - `draft_reply`: Generate a direct reply to the user who asked the question (preferred for answering questions).
+        - `send_message`: Send immediate text to a channel or user.
+        - `draft_reply`: Generate a direct reply to the user (preferred for answering questions or confirming updates).
         - `schedule_reminder`: Schedule a message for the future.
-        - `update_context_task`: Update the project status/tasks.
+        - `update_context_task`: Update the project status/tasks. (ALWAYS accompany this with a draft_reply to confirm).
         - `post_slack_poll`: Create a voting poll. DO NOT send a separate confirmation message - the poll itself is the confirmation. Use confidence >= 0.9 for straightforward poll requests.
           Example poll data:
           {{
@@ -956,10 +958,10 @@ def start_daemon(channel_ids: list):
     schedule.every(1).hour.do(run_proactive_check_job, channel_ids=channel_ids)
     schedule.every().friday.at("17:00").do(run_weekly_report_job)
     
-    # Daily Reports (10 AM IST = 04:30 UTC, 6 PM IST = 12:30 UTC)
-    # Render servers run on UTC, so we need to convert IST to UTC
-    schedule.every().day.at("04:30").do(run_daily_status_job, type="morning", channel_id=main_channel)  # 10:00 AM IST
-    schedule.every().day.at("12:30").do(run_daily_status_job, type="evening", channel_id=main_channel)  # 6:00 PM IST
+    # Daily Reports (10 AM & 6 PM)
+    # Server appears to be running in IST or valid local time based on logs
+    schedule.every().day.at("10:00").do(run_daily_status_job, type="morning", channel_id=main_channel)
+    schedule.every().day.at("18:00").do(run_daily_status_job, type="evening", channel_id=main_channel)
     
     schedule.every(1).hour.do(cleanup_queue_job)
     
@@ -974,8 +976,8 @@ def start_daemon(channel_ids: list):
     log("   - Check mentions: Every 30 seconds")
     log("   - Execute actions: Every 10 seconds")
     log("   - Proactive check: Every 1 hour")
-    log("   - Morning report: 04:30 UTC (10:00 AM IST)")
-    log("   - Evening report: 12:30 UTC (6:00 PM IST)")
+    log("   - Morning report: 10:00 Local/IST")
+    log("   - Evening report: 18:00 Local/IST")
     log("   - Weekly report: Friday 17:00 UTC")
     log("   - Cleanup: Every 1 hour")
     
