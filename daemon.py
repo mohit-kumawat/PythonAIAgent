@@ -759,10 +759,101 @@ def check_and_send_missed_reports():
         else:
             log(f"✅ Evening report for {today_date} already sent.")
     
-    if current_hour < 10:
-        log(f"ℹ️ Too early for morning report (current: {current_hour}:00, scheduled: 10:00)")
-    elif current_hour < 18:
         log(f"ℹ️ Too early for evening report (current: {current_hour}:00, scheduled: 18:00)")
+
+def recover_context_from_messages():
+    """
+    On startup, scan recent Slack messages (last 2 days) to update context.
+    This ensures the bot 'catches up' on what happened while it was offline/deploying.
+    """
+    global monitored_channels
+    log("🔄 Starting Context Recovery: Scanning recent messages...")
+    
+    if not monitored_channels:
+        log("Skipping context recovery: No channels monitored.")
+        return
+
+    # 1. Fetch recent messages
+    main_channel = monitored_channels[0]
+    bot_user_id = os.environ.get("SLACK_BOT_USER_ID")
+    
+    try:
+        # Get messages from last 2 days
+        messages = get_messages_mentions(main_channel, bot_user_id, days=2)
+        if not messages:
+            log("Context Recovery: No recent messages found.")
+            return
+            
+        # Format messages for AI
+        msg_text = ""
+        for m in messages:
+            user = m.get('user', 'Unknown')
+            text = m.get('text', '')
+            ts = datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M')
+            msg_text += f"[{ts}] {user}: {text}\n"
+            
+    except Exception as e:
+        log(f"Context Recovery failed to fetch messages: {e}")
+        return
+
+    # 2. Ask AI to check for updates
+    try:
+        from client_manager import ClientManager
+        context_text = read_context()
+        cm = ClientManager()
+        client = cm.get_client()
+        
+        prompt = f"""You are The Real PM (Recovery Mode).
+        
+        TASK:
+        Compare the CURRENT CONTEXT with recent SLACK MESSAGES.
+        Identify any completed tasks, new blockers, or status updates that are NOT reflected in the context.
+        
+        CURRENT CONTEXT:
+        {context_text}
+        
+        RECENT MESSAGES (Last 48h):
+        {msg_text}
+        
+        OUTPUT:
+        If updates are needed, generate a JSON object with 'actions' array containing `update_context_task` actions.
+        If NO updates are needed (context is already up to date), return a JSON with empty 'actions' array: {{ "actions": [] }}
+        
+        CRITICAL:
+        - Only update if clearly stated in messages (e.g., "I finished X", "Blocker Y is resolved").
+        - Do not hallucinate updates.
+        - STRICT JSON output.
+        """
+        
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=action_schema
+            )
+        )
+        
+        # 3. Process actions
+        response_data = parse_json_response(response.text)
+        actions = response_data.get('actions', [])
+        
+        if actions:
+            log(f"Context Recovery found {len(actions)} updates needed.")
+            # Execute immediately (bypass queue for recovery)
+            for action in actions:
+                if action['action_type'] == 'update_context_task':
+                    data = action['data']
+                    try:
+                        update_section(data['section_title'], data['new_content'], append=data.get('append', False))
+                        log(f"✅ Recovery: Updated context section '{data['section_title']}'")
+                    except Exception as e:
+                        log(f"Recovery update failed: {e}")
+        else:
+            log("Context Recovery: Context is up to date.")
+            
+    except Exception as e:
+        log(f"Context Recovery process failed: {e}")
 
 
 def execute_approved_actions_job():
@@ -972,6 +1063,9 @@ def start_daemon(channel_ids: list):
     
     # Check for missed reports and send them if needed
     check_and_send_missed_reports()
+    
+    # Attempt context recovery (self-healing)
+    recover_context_from_messages()
     
     log("📅 Scheduled jobs:")
     log("   - Check mentions: Every 30 seconds")
