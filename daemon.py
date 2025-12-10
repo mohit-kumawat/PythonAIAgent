@@ -701,6 +701,41 @@ def run_daily_status_job(type="morning"):
     except Exception as e:
         log(f"Daily {type} report generation failed: {e}")
 
+def check_and_send_missed_reports():
+    """
+    Check if today's reports were missed and send them now.
+    This runs on startup to catch up if server was down during scheduled time.
+    """
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
+    today_date = now_ist.strftime('%Y-%m-%d')
+    current_hour = now_ist.hour
+    
+    log(f"Checking for missed reports... Current time: {now_ist.strftime('%H:%M IST')}")
+    
+    # Check morning report (should have been sent by 10 AM)
+    if current_hour >= 10:
+        morning_key = f"daily_morning_{today_date}"
+        if not memory.has_sent_report(morning_key):
+            log(f"⚠️ Morning report for {today_date} was missed! Sending now...")
+            run_daily_status_job(type="morning")
+        else:
+            log(f"✅ Morning report for {today_date} already sent.")
+    
+    # Check evening report (should have been sent by 6 PM)
+    if current_hour >= 18:
+        evening_key = f"daily_evening_{today_date}"
+        if not memory.has_sent_report(evening_key):
+            log(f"⚠️ Evening report for {today_date} was missed! Sending now...")
+            run_daily_status_job(type="evening")
+        else:
+            log(f"✅ Evening report for {today_date} already sent.")
+    
+    if current_hour < 10:
+        log(f"ℹ️ Too early for morning report (current: {current_hour}:00, scheduled: 10:00)")
+    elif current_hour < 18:
+        log(f"ℹ️ Too early for evening report (current: {current_hour}:00, scheduled: 18:00)")
+
 
 def execute_approved_actions_job():
     """
@@ -900,6 +935,9 @@ def start_daemon(channel_ids: list):
     # Run once immediately
     check_mentions_job(manager, channel_ids)
     cleanup_queue_job()
+    
+    # Check for missed reports and send them if needed
+    check_and_send_missed_reports()
     
     log("📅 Scheduled jobs:")
     log("   - Check mentions: Every 30 seconds")
