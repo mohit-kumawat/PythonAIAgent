@@ -758,102 +758,143 @@ def check_and_send_missed_reports():
             run_daily_status_job(type="evening", channel_id=channel_id)
         else:
             log(f"✅ Evening report for {today_date} already sent.")
-    
+    if current_hour < 10:
+        log(f"ℹ️ Too early for morning report (current: {current_hour}:00, scheduled: 10:00)")
+    elif current_hour < 18:
         log(f"ℹ️ Too early for evening report (current: {current_hour}:00, scheduled: 18:00)")
 
 def recover_context_from_messages():
     """
-    On startup, scan recent Slack messages (last 2 days) to update context.
-    This ensures the bot 'catches up' on what happened while it was offline/deploying.
+    Slack-as-Database Recovery (For Render Free Tier):
+    1. Find the last '[SYSTEM] Context Checkpoint' message from the Bot.
+    2. Load that as the base context.
+    3. Scan messages *since* that checkpoint (or last 7 days) for updates.
+    4. Update local context.md.
+    5. Post a new Checkpoint to save the state.
     """
     global monitored_channels
-    log("🔄 Starting Context Recovery: Scanning recent messages...")
+    log("🔄 Starting Context Recovery (Slack-as-Database)...")
     
     if not monitored_channels:
-        log("Skipping context recovery: No channels monitored.")
+        log("Skipping recovery: No channels.")
         return
 
-    # 1. Fetch recent messages
     main_channel = monitored_channels[0]
     bot_user_id = os.environ.get("SLACK_BOT_USER_ID")
+    from client_manager import ClientManager
+    client = ClientManager().get_client() # Gemini client
+    
+    # --- Step 1: Find Last Checkpoint ---
+    base_context = ""
+    checkpoint_ts = 0
     
     try:
-        # Get messages from last 2 days
-        messages = get_messages_mentions(main_channel, bot_user_id, days=2)
-        if not messages:
-            log("Context Recovery: No recent messages found.")
-            return
-            
-        # Format messages for AI
-        msg_text = ""
-        for m in messages:
-            user = m.get('user', 'Unknown')
-            text = m.get('text', '')
-            ts = datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M')
-            msg_text += f"[{ts}] {user}: {text}\n"
-            
+        # Get history to find checkpoint
+        # using slack_tools internal method extraction would be ideal, but we can reuse get_messages_mentions logic
+        # strictly we need 'conversations.history'
+        from slack_sdk import WebClient
+        slack = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+        
+        # Look back up to 200 messages for a checkpoint
+        history = slack.conversations_history(channel=main_channel, limit=200)
+        messages = history.get('messages', [])
+        
+        for msg in messages:
+            if msg.get('user') == bot_user_id and "[SYSTEM] Context Checkpoint" in msg.get('text', ''):
+                # Found it! Extract the code block
+                text = msg.get('text', '')
+                import re
+                match = re.search(r'```(?:markdown)?\s*(.*?)```', text, re.DOTALL)
+                if match:
+                    base_context = match.group(1).strip()
+                    checkpoint_ts = float(msg['ts'])
+                    log(f"✅ Found previous Context Checkpoint from {datetime.fromtimestamp(checkpoint_ts)}")
+                    break
+        
     except Exception as e:
-        log(f"Context Recovery failed to fetch messages: {e}")
-        return
+        log(f"Error searching for checkpoint: {e}")
 
-    # 2. Ask AI to check for updates
+    # --- Step 2: Set Base Context ---
+    # If we found a checkpoint, overwrite local file
+    if base_context:
+        from state_manager import get_context_path
+        ctx_path = get_context_path()
+        with open(ctx_path, "w") as f:
+            f.write(base_context)
+    else:
+        log("No checkpoint found. Using default context.md and scanning 7 days.")
+        import time
+        checkpoint_ts = time.time() - (7 * 24 * 3600) # 7 days ago
+
+    # --- Step 3: Scan for Updates (Since Checkpoint) ---
     try:
-        from client_manager import ClientManager
-        context_text = read_context()
-        cm = ClientManager()
-        client = cm.get_client()
+        # Calculate days to scan
+        now_ts = time.time()
+        days_to_scan = (now_ts - checkpoint_ts) / (24 * 3600)
+        days_to_scan = max(0.1, min(days_to_scan, 7)) # Max 7 days
         
-        prompt = f"""You are The Real PM (Recovery Mode).
+        log(f"Scanning last {days_to_scan:.2f} days of messages for updates...")
         
-        TASK:
-        Compare the CURRENT CONTEXT with recent SLACK MESSAGES.
-        Identify any completed tasks, new blockers, or status updates that are NOT reflected in the context.
+        recent_msgs = get_messages_mentions(main_channel, bot_user_id, days=days_to_scan)
         
-        CURRENT CONTEXT:
-        {context_text}
-        
-        RECENT MESSAGES (Last 48h):
-        {msg_text}
-        
-        OUTPUT:
-        If updates are needed, generate a JSON object with 'actions' array containing `update_context_task` actions.
-        If NO updates are needed (context is already up to date), return a JSON with empty 'actions' array: {{ "actions": [] }}
-        
-        CRITICAL:
-        - Only update if clearly stated in messages (e.g., "I finished X", "Blocker Y is resolved").
-        - Do not hallucinate updates.
-        - STRICT JSON output.
-        """
-        
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=action_schema
-            )
-        )
-        
-        # 3. Process actions
-        response_data = parse_json_response(response.text)
-        actions = response_data.get('actions', [])
-        
-        if actions:
-            log(f"Context Recovery found {len(actions)} updates needed.")
-            # Execute immediately (bypass queue for recovery)
-            for action in actions:
-                if action['action_type'] == 'update_context_task':
-                    data = action['data']
-                    try:
-                        update_section(data['section_title'], data['new_content'], append=data.get('append', False))
-                        log(f"✅ Recovery: Updated context section '{data['section_title']}'")
-                    except Exception as e:
-                        log(f"Recovery update failed: {e}")
+        if not recent_msgs:
+            log("No new messages since checkpoint.")
+            # If we just loaded a checkpoint, we are good.
         else:
-            log("Context Recovery: Context is up to date.")
+            # Reconstruct context
+            current_context = read_context()
+            msg_text = "\n".join([f"[{m.get('user')}]: {m.get('text')}" for m in recent_msgs])
             
+            prompt = f"""You are The Real PM (Recovery).
+            REWRITE the Project Context based on recent updates.
+            
+            OLD CONTEXT:
+            {current_context}
+            
+            RECENT UPDATES (Since last save):
+            {msg_text}
+            
+            INSTRUCTIONS:
+            1. Update 'Active Epics & Tasks' with any completed/new items.
+            2. Update 'Critical Status' if blockers were resolved.
+            3. Return the FULL MARKDOWN of the new context.md.
+            4. Do NOT output JSON. Output raw markdown only.
+            """
+            
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
+            
+            new_context = response.text.strip()
+            # Clean up markdown code blocks if present
+            if new_context.startswith("```"):
+                new_context = new_context.split("\n", 1)[1]
+            if new_context.endswith("```"):
+                new_context = new_context.rsplit("\n", 1)[0]
+                
+            # Save Locally
+            from state_manager import get_context_path
+            ctx_path = get_context_path()
+            with open(ctx_path, "w") as f:
+                f.write(new_context)
+            log("✅ Context updated from recent messages.")
+
     except Exception as e:
-        log(f"Context Recovery process failed: {e}")
+        log(f"Error analyzing messages: {e}")
+
+    # --- Step 4: Save New Checkpoint ---
+    # Post the current state to Slack so it survives the next reboot
+    try:
+        final_context = read_context()
+        # Truncate if too long (?) Slack limit is 40k chars, context usually 2-5k. Should be fine.
+        
+        checkpoint_msg = f"[SYSTEM] Context Checkpoint - {datetime.now().isoformat()}\n```markdown\n{final_context}\n```"
+        send_slack_message(main_channel, checkpoint_msg, bot_user_id)
+        log("💾 Saved new Context Checkpoint to Slack.")
+        
+    except Exception as e:
+        log(f"Failed to save checkpoint to Slack: {e}")
 
 
 def execute_approved_actions_job():
