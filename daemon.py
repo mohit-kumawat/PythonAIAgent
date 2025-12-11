@@ -836,6 +836,7 @@ def recover_context_from_messages():
 
     # --- Step 3: Scan for Updates (Since Checkpoint) ---
     try:
+        import time  # Ensure time is always imported
         # Calculate days to scan
         now_ts = time.time()
         days_to_scan = (now_ts - checkpoint_ts) / (24 * 3600)
