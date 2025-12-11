@@ -898,7 +898,7 @@ def recover_context_from_messages():
         # Truncate if too long (?) Slack limit is 40k chars, context usually 2-5k. Should be fine.
         
         checkpoint_msg = f"[SYSTEM] Context Checkpoint - {datetime.now().isoformat()}\n```markdown\n{final_context}\n```"
-        send_slack_message(main_channel, checkpoint_msg, bot_user_id)
+        send_slack_message(main_channel, checkpoint_msg)  # Post as new message, not thread reply
         log("💾 Saved new Context Checkpoint to Slack.")
         
     except Exception as e:
