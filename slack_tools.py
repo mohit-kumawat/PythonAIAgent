@@ -149,7 +149,7 @@ def schedule_slack_message(channel_id: str, text: str, scheduled_time: str) -> D
         return {"error": f"Invalid datetime format: {e}"}
 
 def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: bool = False, 
-                          include_keywords: List[str] = None) -> List[Dict[str, Any]]:
+                          include_keywords: List[str] = None, ignore_user_id: str = None) -> List[Dict[str, Any]]:
     """
     Gets messages where a specific user was mentioned or specific keywords appear in the last N days.
     
@@ -159,6 +159,7 @@ def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: b
         days: Number of days to look back.
         debug: If True, print debug information.
         include_keywords: Optional list of keywords/phrases to search for (case-insensitive).
+        ignore_user_id: Optional User ID to ignore (e.g., the bot itself).
         
     Returns:
         List of messages containing mentions or keywords.
@@ -190,6 +191,10 @@ def get_messages_mentions(channel_id: str, user_id: str, days: int = 7, debug: b
         # Filter for messages that mention the user or contain keywords
         mentions = []
         for msg in messages:
+            # Check if we should ignore this user (e.g., bot ignoring itself)
+            if ignore_user_id and msg.get("user") == ignore_user_id:
+                continue
+                
             text = msg.get("text", "")
             text_lower = text.lower()
             

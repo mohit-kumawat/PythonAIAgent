@@ -4,46 +4,29 @@ from google.genai import types
 
 import shutil
 
+from memory_manager import get_memory_manager
+
 def get_context_path():
     """
     Get the path to context.md.
-    If PERSISTENT_DATA_PATH is set:
-      - Use that path.
-      - If file doesn't exist there, copy from local defaults.
+    Deprecated: Use MemoryManager.load_context() instead.
     """
     persistent_dir = os.environ.get('PERSISTENT_DATA_PATH')
     default_path = "context.md"
-    
     if persistent_dir:
-        os.makedirs(persistent_dir, exist_ok=True)
-        persistent_path = os.path.join(persistent_dir, "context.md")
-        
-        if not os.path.exists(persistent_path):
-            if os.path.exists(default_path):
-                try:
-                    shutil.copy2(default_path, persistent_path)
-                    print(f"Initialized persistent context at {persistent_path}")
-                except Exception as e:
-                    print(f"Error initializing persistent context: {e}")
-                    return default_path
-            else:
-                # Neither exists
-                return default_path
-        return persistent_path
-    
+        return os.path.join(persistent_dir, "context.md")
     return default_path
 
 def read_context():
     """
-    Reads the context.md file.
+    Reads the context from MemoryManager (DB or File).
     Returns the content as a string.
     """
-    file_path = get_context_path()
-    if not os.path.exists(file_path):
-        return ""
-    
-    with open(file_path, "r") as f:
-        return f.read()
+    return get_memory_manager().load_context()
+
+def write_context(content: str):
+    """Writes the context to MemoryManager (DB or File)."""
+    get_memory_manager().save_context(content)
 
 def parse_context_with_gemini(client, context_text):
     """
@@ -78,7 +61,7 @@ Markdown Content:
 
 def update_section(section_title, new_content, append=False):
     """
-    Updates a specific section in context.md.
+    Updates a specific section in context.md (DB or File).
     
     Args:
         section_title: The title of the section to update (e.g., "1. Critical Status").
@@ -91,12 +74,9 @@ def update_section(section_title, new_content, append=False):
     """
     import re
     
-    file_path = get_context_path()
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"{file_path} not found.")
-    
-    with open(file_path, "r") as f:
-        content = f.read()
+    content = read_context()
+    if not content:
+        raise ValueError("Context is empty or not found.")
         
     # Escape the title to handle any special regex characters
     escaped_title = re.escape(section_title)
@@ -109,7 +89,7 @@ def update_section(section_title, new_content, append=False):
     match = re.search(pattern, content, flags=re.DOTALL)
     
     if not match:
-        raise ValueError(f"Section '{section_title}' not found in {file_path}")
+        raise ValueError(f"Section '{section_title}' not found in context.")
     
     # Construct the new content
     if append:
@@ -134,6 +114,5 @@ def update_section(section_title, new_content, append=False):
     # content[match.end(2):] is the rest of the file starting from the next header (or empty if EOF)
     updated_file_content = content[:match.end(1)] + clean_new_content + content[match.end(2):]
     
-    with open(file_path, "w") as f:
-        f.write(updated_file_content)
+    write_context(updated_file_content)
 

@@ -773,18 +773,28 @@ def recover_context_from_messages():
     5. Post a new Checkpoint to save the state.
     """
     global monitored_channels
-    log("🔄 Starting Context Recovery (Slack-as-Database)...")
+    
+    # 0. Check if we already have persistent context (DB or File)
+    current_context = read_context()
+    
+    # If using Postgres and context exists, skip scan (unless force requested?)
+    if os.environ.get('DATABASE_URL') and current_context and len(current_context) > 100:
+        log("✅ Persistent DB context found. Skipping Slack scan.")
+        return
+
+    log("🔄 Starting Context Recovery (Slack-as-Database / First Run)...")
     
     if not monitored_channels:
         log("Skipping recovery: No channels.")
         return
-
+    
     main_channel = monitored_channels[0]
     bot_user_id = os.environ.get("SLACK_BOT_USER_ID")
     from client_manager import ClientManager
     client = ClientManager().get_client() # Gemini client
     
     # --- Step 1: Find Last Checkpoint ---
+    # Only relevant for Slack-based persistence (no DB)
     base_context = ""
     checkpoint_ts = 0
     
@@ -815,12 +825,10 @@ def recover_context_from_messages():
         log(f"Error searching for checkpoint: {e}")
 
     # --- Step 2: Set Base Context ---
-    # If we found a checkpoint, overwrite local file
+    # If we found a checkpoint, overwrite local file (or DB)
     if base_context:
-        from state_manager import get_context_path
-        ctx_path = get_context_path()
-        with open(ctx_path, "w") as f:
-            f.write(base_context)
+        from state_manager import write_context
+        write_context(base_context)
     else:
         log("No checkpoint found. Using default context.md and scanning 7 days.")
         import time
@@ -835,7 +843,8 @@ def recover_context_from_messages():
         
         log(f"Scanning last {days_to_scan:.2f} days of messages for updates...")
         
-        recent_msgs = get_messages_mentions(main_channel, bot_user_id, days=days_to_scan)
+        # Scan for mentions/messages involving the bot, but IGNORE messages sent BY the bot
+        recent_msgs = get_messages_mentions(main_channel, bot_user_id, days=days_to_scan, ignore_user_id=bot_user_id)
         
         if not recent_msgs:
             log("No new messages since checkpoint.")
@@ -873,11 +882,9 @@ def recover_context_from_messages():
             if new_context.endswith("```"):
                 new_context = new_context.rsplit("\n", 1)[0]
                 
-            # Save Locally
-            from state_manager import get_context_path
-            ctx_path = get_context_path()
-            with open(ctx_path, "w") as f:
-                f.write(new_context)
+            # Save Persistent (DB or File)
+            from state_manager import write_context
+            write_context(new_context)
             log("✅ Context updated from recent messages.")
 
     except Exception as e:
